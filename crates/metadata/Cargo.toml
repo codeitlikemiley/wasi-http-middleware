@@ -7,6 +7,9 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 description = "Trusted HTTP metadata contract for composed WASI middleware"
+readme = "../../README.md"
+keywords = ["wasi", "wasm", "http", "authentication", "middleware"]
+categories = ["wasm", "web-programming::http-server", "authentication"]
 
 [dependencies]
 base64 = "0.22.1"

@@ -7,6 +7,9 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 description = "Streaming-safe helpers for WASIp3 HTTP middleware components"
+readme = "../../README.md"
+keywords = ["wasi", "wasm", "http", "component-model", "middleware"]
+categories = ["wasm", "web-programming::http-server"]
 
 [dependencies]
 http.workspace = true

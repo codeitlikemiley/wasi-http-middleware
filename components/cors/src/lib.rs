@@ -18,7 +18,7 @@ use wasip3::{
 
 #[allow(missing_docs)]
 mod bindings {
-    wasi_http_middleware_component_support::generate_middleware_bindings!();
+    wasi_http_middleware_component_support::generate_middleware_bindings!("../../wit");
 }
 
 use bindings::wasi::http::handler;

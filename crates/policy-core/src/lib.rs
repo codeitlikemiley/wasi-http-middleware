@@ -525,7 +525,7 @@ pub enum AuthDecision {
     Unauthenticated,
     /// Identity was valid but the coarse policy denied access.
     Forbidden,
-    /// The external policy service failed or violated its contract.
+    /// The external authentication broker failed or violated its contract.
     Unavailable,
 }
 

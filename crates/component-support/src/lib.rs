@@ -36,10 +36,6 @@ macro_rules! generate_middleware_bindings {
             },
         });
     };
-
-    () => {
-        $crate::generate_middleware_bindings!("../../wit");
-    };
 }
 
 /// One HTTP field as exposed by `wasi:http/types`.
