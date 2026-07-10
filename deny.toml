@@ -17,6 +17,9 @@ allow = [
 confidence-threshold = 0.8
 
 [bans]
+# `wasip3 0.7.0` currently embeds wit-bindgen 0.57.1 while component exports
+# require the pinned final-WIT generator 0.59.0. Keep this warning visible and
+# remove the allowance when the upstream runtime and generator converge.
 multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
