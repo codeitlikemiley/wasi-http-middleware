@@ -2,7 +2,10 @@
 
 #![deny(missing_docs)]
 
-use std::collections::BTreeMap;
+use std::sync::{
+    OnceLock,
+    atomic::{AtomicU64, Ordering},
+};
 
 use http::{HeaderMap, HeaderName, HeaderValue};
 use wasip3::http::types::{ErrorCode, Headers, Method, Request, Response, Scheme};
@@ -44,6 +47,12 @@ macro_rules! generate_middleware_bindings {
 /// One HTTP field as exposed by `wasi:http/types`.
 pub type Header = (String, Vec<u8>);
 
+const REQUEST_ID_PREFIX_BYTES: usize = 16;
+const REQUEST_ID_CAPACITY: usize = (REQUEST_ID_PREFIX_BYTES + size_of::<u64>()) * 2;
+
+static REQUEST_ID_PREFIX: OnceLock<[u8; REQUEST_ID_PREFIX_BYTES]> = OnceLock::new();
+static REQUEST_ID_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 /// A field could not be converted between WASI HTTP and `http` crate types.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeaderConversionError;
@@ -80,10 +89,49 @@ pub fn remove_header(headers: &mut Vec<Header>, name: &str) {
     headers.retain(|(candidate, _)| !candidate.eq_ignore_ascii_case(name));
 }
 
+/// Removes every field whose name starts with `prefix`, compared
+/// case-insensitively.
+pub fn remove_headers_with_prefix(headers: &mut Vec<Header>, prefix: &str) {
+    headers.retain(|(candidate, _)| {
+        candidate
+            .get(..prefix.len())
+            .is_none_or(|start| !start.eq_ignore_ascii_case(prefix))
+    });
+}
+
 /// Replaces every field named `name` with one canonical field.
 pub fn set_header(headers: &mut Vec<Header>, name: &str, value: impl Into<Vec<u8>>) {
     remove_header(headers, name);
     headers.push((name.to_ascii_lowercase(), value.into()));
+}
+
+/// Generates a non-secret, safe ASCII request ID.
+///
+/// One random 128-bit prefix is allocated per component instance. A relaxed
+/// monotonic 64-bit sequence then guarantees distinct IDs within that
+/// instance until the sequence wraps. The resulting 48-character lowercase
+/// hexadecimal value is suitable for propagation and logging, but must not be
+/// treated as an authentication token.
+pub fn generated_request_id() -> String {
+    let prefix = REQUEST_ID_PREFIX.get_or_init(|| {
+        let random = wasip3::random::random::get_random_bytes(REQUEST_ID_PREFIX_BYTES as u64);
+        let mut prefix = [0_u8; REQUEST_ID_PREFIX_BYTES];
+        for (target, source) in prefix.iter_mut().zip(random) {
+            *target = source;
+        }
+        prefix
+    });
+    encode_request_id(prefix, REQUEST_ID_SEQUENCE.fetch_add(1, Ordering::Relaxed))
+}
+
+fn encode_request_id(prefix: &[u8; REQUEST_ID_PREFIX_BYTES], sequence: u64) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(REQUEST_ID_CAPACITY);
+    for byte in prefix.iter().copied().chain(sequence.to_be_bytes()) {
+        output.push(char::from(HEX[usize::from(byte >> 4)]));
+        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    output
 }
 
 /// Converts WASI HTTP fields to an `http` header map without collapsing
@@ -96,10 +144,20 @@ pub fn to_header_map(headers: &[Header]) -> Result<HeaderMap, HeaderConversionEr
     let mut output = HeaderMap::new();
     for (name, value) in headers {
         let name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| HeaderConversionError)?;
-        let value = HeaderValue::from_bytes(value).map_err(|_| HeaderConversionError)?;
+        let mut value = HeaderValue::from_bytes(value).map_err(|_| HeaderConversionError)?;
+        if is_sensitive_header(&name) {
+            value.set_sensitive(true);
+        }
         output.append(name, value);
     }
     Ok(output)
+}
+
+fn is_sensitive_header(name: &HeaderName) -> bool {
+    matches!(
+        name.as_str(),
+        "authorization" | "proxy-authorization" | "cookie" | "set-cookie"
+    ) || name.as_str().starts_with("x-wasi-auth-")
 }
 
 /// Converts an `http` header map to WASI HTTP fields while retaining all
@@ -135,11 +193,79 @@ pub fn merge_header_map(target: &mut Vec<Header>, source: &HeaderMap) {
 /// Returns a WASI HTTP error when the requested header changes or request
 /// metadata cannot be applied to the forwarded request.
 pub fn replace_request_headers(request: Request, headers: &[Header]) -> Result<Request, ErrorCode> {
+    let original_fields = request_headers(&request);
+    replace_request_headers_from_original(request, &original_fields, headers)
+}
+
+/// Rebuilds `request` with `headers`, reusing an already-copied view of the
+/// original fields while forwarding its body stream, trailers, request
+/// options, method, scheme, path/query, and authority unchanged.
+///
+/// This is equivalent to [`replace_request_headers`] but avoids a second
+/// `copy-all` host call when a middleware has already inspected the original
+/// fields.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when the requested header changes or request
+/// metadata cannot be applied to the forwarded request.
+pub fn replace_request_headers_from_original(
+    request: Request,
+    original_fields: &[Header],
+    headers: &[Header],
+) -> Result<Request, ErrorCode> {
     let original_headers = request.get_headers();
-    let original_fields = original_headers.copy_all();
     let forwarded_headers = original_headers.clone();
     drop(original_headers);
-    apply_header_diff(&forwarded_headers, &original_fields, headers)
+    apply_header_diff(&forwarded_headers, original_fields, headers)
+        .map_err(|()| request_header_error())?;
+
+    let method = request.get_method();
+    let scheme = request.get_scheme();
+    let path_with_query = request.get_path_with_query();
+    let authority = request.get_authority();
+    let options = request.get_options();
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
+    let (body, trailers) = Request::consume_body(request, body_result);
+
+    let (forwarded, transmission_result) =
+        Request::new(forwarded_headers, Some(body), trailers, options);
+    wit_bindgen::spawn_local(async move {
+        let result = transmission_result.await;
+        let _write_result = body_result_writer.write(result).await;
+    });
+    restore_request_metadata(
+        &forwarded,
+        &method,
+        scheme.as_ref(),
+        path_with_query.as_deref(),
+        authority.as_deref(),
+    )?;
+    Ok(forwarded)
+}
+
+/// Rebuilds `request` after applying only the named header deletions and
+/// replacements to a clone of its host-owned header resource.
+///
+/// Unlike [`replace_request_headers`], this avoids copying and diffing the
+/// complete header list. Each replacement name is canonicalized to the values
+/// supplied for that name; fields not named by either slice remain untouched.
+/// The body stream, trailers, request options, method, scheme, path/query, and
+/// authority are forwarded unchanged.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when a requested edit or request metadata cannot
+/// be applied to the forwarded request.
+pub fn edit_request_headers(
+    request: Request,
+    delete_names: &[&str],
+    replacements: &[(&str, &[u8])],
+) -> Result<Request, ErrorCode> {
+    let original_headers = request.get_headers();
+    let forwarded_headers = original_headers.clone();
+    drop(original_headers);
+    apply_header_edits(&forwarded_headers, delete_names, replacements)
         .map_err(|()| request_header_error())?;
 
     let method = request.get_method();
@@ -180,11 +306,68 @@ pub fn replace_response_headers(
     response: Response,
     headers: &[Header],
 ) -> Result<Response, ErrorCode> {
+    let original_fields = response_headers(&response);
+    replace_response_headers_from_original(response, &original_fields, headers)
+}
+
+/// Rebuilds `response` with `headers`, reusing an already-copied view of the
+/// original fields while forwarding its status, body stream, and trailers
+/// unchanged.
+///
+/// This is equivalent to [`replace_response_headers`] but avoids a second
+/// `copy-all` host call when a middleware has already inspected the original
+/// fields.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when the requested header changes or original
+/// status code cannot be applied to the forwarded response.
+pub fn replace_response_headers_from_original(
+    response: Response,
+    original_fields: &[Header],
+    headers: &[Header],
+) -> Result<Response, ErrorCode> {
     let original_headers = response.get_headers();
-    let original_fields = original_headers.copy_all();
     let forwarded_headers = original_headers.clone();
     drop(original_headers);
-    apply_header_diff(&forwarded_headers, &original_fields, headers)
+    apply_header_diff(&forwarded_headers, original_fields, headers)
+        .map_err(|()| response_header_error())?;
+
+    let status = response.get_status_code();
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
+    let (body, trailers) = Response::consume_body(response, body_result);
+    let (forwarded, transmission_result) = Response::new(forwarded_headers, Some(body), trailers);
+    wit_bindgen::spawn_local(async move {
+        let result = transmission_result.await;
+        let _write_result = body_result_writer.write(result).await;
+    });
+    forwarded
+        .set_status_code(status)
+        .map_err(|()| ErrorCode::InternalError(None))?;
+    Ok(forwarded)
+}
+
+/// Rebuilds `response` after applying only the named header deletions and
+/// replacements to a clone of its host-owned header resource.
+///
+/// Unlike [`replace_response_headers`], this avoids copying and diffing the
+/// complete header list. Each replacement name is canonicalized to the values
+/// supplied for that name; fields not named by either slice remain untouched.
+/// The status, body stream, and trailers are forwarded unchanged.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when a requested edit or original status code
+/// cannot be applied to the forwarded response.
+pub fn edit_response_headers(
+    response: Response,
+    delete_names: &[&str],
+    replacements: &[(&str, &[u8])],
+) -> Result<Response, ErrorCode> {
+    let original_headers = response.get_headers();
+    let forwarded_headers = original_headers.clone();
+    drop(original_headers);
+    apply_header_edits(&forwarded_headers, delete_names, replacements)
         .map_err(|()| response_header_error())?;
 
     let status = response.get_status_code();
@@ -240,33 +423,102 @@ fn restore_request_metadata(
 }
 
 fn apply_header_diff(fields: &Headers, original: &[Header], desired: &[Header]) -> Result<(), ()> {
-    let original = group_headers(original);
-    let desired = group_headers(desired);
-
-    for (name, values) in &original {
-        match desired.get(name) {
-            Some(desired_values) if desired_values == values => {}
-            Some(desired_values) => fields.set(name, desired_values).map_err(|_| ())?,
-            None => fields.delete(name).map_err(|_| ())?,
+    for name in unique_header_names(original) {
+        if !contains_header_name(desired, name) {
+            fields.delete(name).map_err(|_| ())?;
         }
     }
-    for (name, values) in &desired {
-        if !original.contains_key(name) {
-            fields.set(name, values).map_err(|_| ())?;
+    for name in unique_header_names(desired) {
+        if !header_values_equal(original, desired, name) {
+            let values = desired
+                .iter()
+                .filter(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.clone())
+                .collect::<Vec<_>>();
+            fields.set(name, &values).map_err(|_| ())?;
         }
     }
     Ok(())
 }
 
-fn group_headers(headers: &[Header]) -> BTreeMap<String, Vec<Vec<u8>>> {
-    let mut grouped = BTreeMap::<String, Vec<Vec<u8>>>::new();
-    for (name, value) in headers {
-        grouped
-            .entry(name.to_ascii_lowercase())
-            .or_default()
-            .push(value.clone());
+fn apply_header_edits(
+    fields: &Headers,
+    delete_names: &[&str],
+    replacements: &[(&str, &[u8])],
+) -> Result<(), ()> {
+    for name in unique_names(delete_names) {
+        fields.delete(name).map_err(|_| ())?;
     }
-    grouped
+    for name in unique_replacement_names(replacements) {
+        fields.delete(name).map_err(|_| ())?;
+    }
+    for (name, value) in replacements {
+        fields.append(name, value).map_err(|_| ())?;
+    }
+    Ok(())
+}
+
+fn unique_names<'a>(names: &'a [&'a str]) -> Vec<&'a str> {
+    let mut unique = Vec::with_capacity(names.len());
+    for name in names {
+        if !unique
+            .iter()
+            .any(|existing: &&str| existing.eq_ignore_ascii_case(name))
+        {
+            unique.push(*name);
+        }
+    }
+    unique
+}
+
+fn unique_replacement_names<'a>(replacements: &'a [(&'a str, &'a [u8])]) -> Vec<&'a str> {
+    let mut unique = Vec::with_capacity(replacements.len());
+    for (name, _) in replacements {
+        if !unique
+            .iter()
+            .any(|existing: &&str| existing.eq_ignore_ascii_case(name))
+        {
+            unique.push(*name);
+        }
+    }
+    unique
+}
+
+fn unique_header_names(headers: &[Header]) -> Vec<&str> {
+    let mut names = Vec::with_capacity(headers.len());
+    for (name, _) in headers {
+        if !names
+            .iter()
+            .any(|existing: &&str| existing.eq_ignore_ascii_case(name))
+        {
+            names.push(name.as_str());
+        }
+    }
+    names
+}
+
+fn contains_header_name(headers: &[Header], name: &str) -> bool {
+    headers
+        .iter()
+        .any(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+}
+
+fn header_values_equal(original: &[Header], desired: &[Header], name: &str) -> bool {
+    let mut original_values = original
+        .iter()
+        .filter(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value);
+    let mut desired_values = desired
+        .iter()
+        .filter(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value);
+    loop {
+        match (original_values.next(), desired_values.next()) {
+            (Some(original), Some(desired)) if original == desired => {}
+            (None, None) => return true,
+            _ => return false,
+        }
+    }
 }
 
 fn request_header_error() -> ErrorCode {
@@ -275,4 +527,57 @@ fn request_header_error() -> ErrorCode {
 
 fn response_header_error() -> ErrorCode {
     ErrorCode::HttpResponseHeaderSectionSize(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_request_id, remove_headers_with_prefix, to_header_map};
+
+    #[test]
+    fn generated_request_id_encoding_is_fixed_width_and_monotonic() {
+        let prefix = [0xabu8; 16];
+        assert_eq!(
+            encode_request_id(&prefix, 1),
+            "abababababababababababababababab0000000000000001"
+        );
+        assert_ne!(encode_request_id(&prefix, 1), encode_request_id(&prefix, 2));
+    }
+
+    #[test]
+    fn reserved_header_prefix_removal_is_case_insensitive() {
+        let mut headers = vec![
+            ("X-WASI-AUTH-CONTEXT".to_owned(), b"spoofed".to_vec()),
+            ("content-type".to_owned(), b"text/plain".to_vec()),
+        ];
+        remove_headers_with_prefix(&mut headers, "x-wasi-auth-");
+        assert_eq!(
+            headers,
+            vec![("content-type".to_owned(), b"text/plain".to_vec())]
+        );
+    }
+
+    #[test]
+    fn converted_secret_and_identity_headers_are_debug_sensitive() {
+        let headers = to_header_map(&[
+            (
+                "authorization".to_owned(),
+                b"Bearer token-debug-sentinel".to_vec(),
+            ),
+            (
+                "cookie".to_owned(),
+                b"session=cookie-debug-sentinel".to_vec(),
+            ),
+            (
+                "x-wasi-auth-context".to_owned(),
+                b"identity-debug-sentinel".to_vec(),
+            ),
+        ])
+        .expect("valid headers");
+
+        for value in headers.values() {
+            assert!(value.is_sensitive());
+        }
+        let debug = format!("{headers:?}");
+        assert!(!debug.contains("debug-sentinel"));
+    }
 }

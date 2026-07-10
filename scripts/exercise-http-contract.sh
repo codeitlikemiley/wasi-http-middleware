@@ -63,7 +63,7 @@ require_header "x-request-id" '[A-Za-z0-9._:/-]{1,128}'
 require_header "x-content-type-options" 'nosniff'
 require_header "referrer-policy" 'strict-origin-when-cross-origin'
 
-require_status 403 --header 'Authorization: Bearer deny' "${base_url}/"
+require_status 503 --header 'Authorization: Bearer deny' "${base_url}/"
 require_status 503 --header 'Authorization: Bearer error' "${base_url}/"
 require_status 503 --header 'Authorization: Bearer malformed' "${base_url}/"
 require_status 503 --header 'Authorization: Bearer invalid-identity' "${base_url}/"

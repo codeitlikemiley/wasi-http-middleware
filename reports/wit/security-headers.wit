@@ -8,7 +8,6 @@ world root {
   import wasi:cli/environment@0.2.6;
   import wasi:cli/exit@0.2.6;
   import wasi:cli/stderr@0.2.6;
-  import wasi:random/insecure-seed@0.2.6;
 
   export wasi:http/handler@0.3.0;
 }
@@ -42,6 +41,8 @@ package wasi:http@0.3.0 {
       size-exceeded,
       other(option<string>),
     }
+
+    type field-value = list<u8>;
 
     type status-code = u16;
 
@@ -103,8 +104,6 @@ package wasi:http@0.3.0 {
     }
 
     type trailers = fields;
-
-    type field-value = list<u8>;
   }
   interface handler {
     use types.{request, response, error-code};
@@ -146,12 +145,5 @@ package wasi:cli@0.2.6 {
     use wasi:io/streams@0.2.6.{output-stream};
 
     get-stderr: func() -> output-stream;
-  }
-}
-
-
-package wasi:random@0.2.6 {
-  interface insecure-seed {
-    insecure-seed: func() -> tuple<u64, u64>;
   }
 }

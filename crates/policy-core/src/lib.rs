@@ -4,7 +4,7 @@
 //! forward requests, and apply the resulting decisions without buffering HTTP
 //! bodies.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fmt};
 
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri,
@@ -443,7 +443,7 @@ fn hex_value(byte: u8) -> Option<u8> {
 }
 
 /// Successful authentication-broker response body.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct AuthnSuccessV1 {
     version: u8,
@@ -465,7 +465,7 @@ struct AuthnSuccessV1 {
     policy_revision: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct AuthnActorV1 {
     issuer: String,
@@ -473,11 +473,20 @@ struct AuthnActorV1 {
 }
 
 /// Broker-validated claims awaiting binding to deployment configuration.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct AuthenticatedClaimsV1 {
     principal: PrincipalV1,
     decision_id: String,
     policy_revision: String,
+}
+
+impl fmt::Debug for AuthenticatedClaimsV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AuthenticatedClaimsV1")
+            .field("claims", &"<redacted>")
+            .finish_non_exhaustive()
+    }
 }
 
 impl AuthenticatedClaimsV1 {
@@ -523,8 +532,6 @@ pub enum AuthDecision {
     Allow(Box<AuthenticatedClaimsV1>),
     /// No acceptable identity was supplied.
     Unauthenticated,
-    /// Identity was valid but the coarse policy denied access.
-    Forbidden,
     /// The external authentication broker failed or violated its contract.
     Unavailable,
 }
@@ -561,7 +568,6 @@ pub fn parse_authn_response(status: StatusCode, body: &[u8]) -> AuthDecision {
                 AuthDecision::Allow(Box::new(claims))
             }),
         StatusCode::UNAUTHORIZED => AuthDecision::Unauthenticated,
-        StatusCode::FORBIDDEN => AuthDecision::Forbidden,
         _ => AuthDecision::Unavailable,
     }
 }
@@ -827,6 +833,14 @@ mod tests {
     }
 
     #[test]
+    fn broker_forbidden_is_not_treated_as_domain_authorization() {
+        assert_eq!(
+            parse_authn_response(StatusCode::FORBIDDEN, b""),
+            AuthDecision::Unavailable
+        );
+    }
+
+    #[test]
     fn authn_response_builds_valid_versioned_claims() {
         let decision = parse_authn_response(
             StatusCode::OK,
@@ -844,6 +858,17 @@ mod tests {
         );
         assert_eq!(claims.decision_id(), "decision-1");
         assert_eq!(claims.policy_revision(), "revision-1");
+    }
+
+    #[test]
+    fn authenticated_claims_debug_output_is_redacted() {
+        let decision = parse_authn_response(
+            StatusCode::OK,
+            br#"{"version":1,"subject":"identity-debug-sentinel","issuer":"issuer-debug-sentinel","scopes":["scope-debug-sentinel"],"decision_id":"decision-debug-sentinel","policy_revision":"policy-debug-sentinel"}"#,
+        );
+        let debug = format!("{decision:?}");
+        assert!(debug.contains("redacted"));
+        assert!(!debug.contains("debug-sentinel"));
     }
 
     #[test]

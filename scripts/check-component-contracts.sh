@@ -107,7 +107,6 @@ wasi:http/handler@${wasi_http_version}
 wasi:http/types@${wasi_http_version}
 wasi:io/error@0.2.6
 wasi:io/streams@0.2.6
-wasi:random/insecure-seed@0.2.6
 EOF
             ;;
         request-id)
@@ -119,7 +118,6 @@ wasi:http/handler@${wasi_http_version}
 wasi:http/types@${wasi_http_version}
 wasi:io/error@0.2.6
 wasi:io/streams@0.2.6
-wasi:random/insecure-seed@0.2.6
 wasi:random/random@${wasi_http_version}
 EOF
             ;;

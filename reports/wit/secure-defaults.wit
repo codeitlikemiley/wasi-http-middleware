@@ -54,8 +54,8 @@ package wasi:http@0.3.0 {
 
     resource fields {
       from-list: static func(entries: list<tuple<field-name, field-value>>) -> result<fields, header-error>;
-      set: func(name: field-name, value: list<field-value>) -> result<_, header-error>;
       delete: func(name: field-name) -> result<_, header-error>;
+      append: func(name: field-name, value: field-value) -> result<_, header-error>;
       copy-all: func() -> list<tuple<field-name, field-value>>;
       clone: func() -> fields;
     }

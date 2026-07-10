@@ -4,6 +4,8 @@
 //! reachable exclusively through a composed middleware chain that removes
 //! client-supplied values before inserting one canonical context.
 
+use std::fmt;
+
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -41,10 +43,19 @@ pub enum AuthStateV1 {
 /// Actor identity is always the ordered pair `(issuer, subject)`. It is not a
 /// globally ambiguous subject string and is distinct from the authenticated
 /// principal that is acting.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ActorV1 {
     issuer: String,
     subject: String,
+}
+
+impl fmt::Debug for ActorV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ActorV1")
+            .field("identity", &"<redacted>")
+            .finish()
+    }
 }
 
 impl ActorV1 {
@@ -85,7 +96,7 @@ impl ActorV1 {
 ///
 /// The canonical identity key is the ordered pair `(issuer, subject)`. A
 /// subject must never be compared without its issuer.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PrincipalV1 {
     issuer: String,
     subject: String,
@@ -98,6 +109,15 @@ pub struct PrincipalV1 {
     auth_time: Option<u64>,
     expires_at: Option<u64>,
     session_id: Option<String>,
+}
+
+impl fmt::Debug for PrincipalV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PrincipalV1")
+            .field("identity", &"<redacted>")
+            .finish_non_exhaustive()
+    }
 }
 
 impl PrincipalV1 {
@@ -324,7 +344,7 @@ impl PrincipalV1 {
 /// accepted from the authentication broker. The terminal service identity and
 /// expected OAuth audiences are distinct immutable values; for example,
 /// `orders-api` may require the audience `api://orders`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct AuthContextV1 {
     state: AuthStateV1,
     service_id: String,
@@ -332,6 +352,16 @@ pub struct AuthContextV1 {
     principal: Option<PrincipalV1>,
     decision_id: Option<String>,
     policy_revision: Option<String>,
+}
+
+impl fmt::Debug for AuthContextV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AuthContextV1")
+            .field("state", &self.state)
+            .field("trusted_metadata", &"<redacted>")
+            .finish_non_exhaustive()
+    }
 }
 
 impl AuthContextV1 {
@@ -482,7 +512,9 @@ pub fn encode_auth_context(context: &AuthContextV1) -> Result<HeaderValue, Metad
     if encoded.len() > MAX_AUTH_CONTEXT_ENCODED_LEN {
         return Err(MetadataError::ContextTooLarge);
     }
-    HeaderValue::from_str(&encoded).map_err(|_| MetadataError::InvalidEncoding)
+    let mut value = HeaderValue::from_str(&encoded).map_err(|_| MetadataError::InvalidEncoding)?;
+    value.set_sensitive(true);
+    Ok(value)
 }
 
 /// Decodes and validates a canonical V1 authentication context.
@@ -870,6 +902,40 @@ mod tests {
             principal.actor().map(ActorV1::identity_key),
             Some(("https://workload.example", "job-1"))
         );
+    }
+
+    #[test]
+    fn debug_output_redacts_trusted_identity_and_decision_values() {
+        let principal = PrincipalV1::new("issuer-debug-sentinel.example", "subject-debug-sentinel")
+            .expect("valid identity")
+            .with_actor(Some(
+                ActorV1::new(
+                    "actor-issuer-debug-sentinel.example",
+                    "actor-subject-debug-sentinel",
+                )
+                .expect("valid actor"),
+            ));
+        let context = AuthContextV1::authenticated(
+            "service-debug-sentinel",
+            ["audience-debug-sentinel"],
+            principal.clone(),
+            "decision-debug-sentinel",
+            "policy-debug-sentinel",
+        )
+        .expect("valid context");
+        let encoded = encode_auth_context(&context).expect("context encodes");
+
+        for debug in [
+            format!("{:?}", principal.actor().expect("actor")),
+            format!("{principal:?}"),
+            format!("{context:?}"),
+        ] {
+            assert!(debug.contains("redacted"));
+            assert!(!debug.contains("debug-sentinel"));
+        }
+        assert!(!format!("{encoded:?}").contains("debug-sentinel"));
+        assert!(encoded.is_sensitive());
+        assert!(encoded.clone().is_sensitive());
     }
 
     #[test]

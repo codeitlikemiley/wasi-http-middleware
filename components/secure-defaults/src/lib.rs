@@ -9,20 +9,21 @@
 use std::{borrow::Cow, sync::OnceLock};
 
 use http::{
-    HeaderMap, HeaderValue, Method as HttpMethod,
-    header::{AUTHORIZATION, VARY},
+    HeaderMap, HeaderName, HeaderValue, Method as HttpMethod,
+    header::{
+        ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, AUTHORIZATION, ORIGIN, VARY,
+    },
 };
 use thiserror::Error;
 use wasi_http_authn_runtime::{
     AuthnConfig, AuthnConfigError, AuthnOutcome, AuthnRejection, authenticate,
 };
-use wasi_http_metadata::{REQUEST_ID_HEADER, insert_auth_context, strip_reserved_auth_headers};
+use wasi_http_metadata::{AUTH_CONTEXT_HEADER, REQUEST_ID_HEADER};
 use wasi_http_middleware_component_support::{
-    Header, empty_response, from_header_map, header_values, merge_header_map,
-    replace_request_headers, replace_response_headers, request_headers, response_headers,
-    set_header, to_header_map,
+    Header, edit_request_headers, edit_response_headers, empty_response, from_header_map,
+    generated_request_id, header_values, request_headers, response_headers,
 };
-use wasi_http_policy_core::{CorsConfig, RequestIdPolicy, apply_security_headers};
+use wasi_http_policy_core::{CorsConfig, is_valid_request_id};
 use wasip3::{
     cli::environment::get_environment,
     http::types::{ErrorCode, Method, Request, Response},
@@ -40,8 +41,6 @@ const CORS_METHODS: &str = "WASI_MIDDLEWARE_CORS_METHODS";
 const CORS_HEADERS: &str = "WASI_MIDDLEWARE_CORS_HEADERS";
 const CORS_ALLOW_CREDENTIALS: &str = "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS";
 const VARY_HEADER: &str = "vary";
-const REQUEST_ID_BYTES: usize = 16;
-
 static CORS_CONFIG: OnceLock<Result<CorsConfig, CorsConfigError>> = OnceLock::new();
 static AUTHN_CONFIG: OnceLock<Result<AuthnConfig, AuthnConfigError>> = OnceLock::new();
 
@@ -62,18 +61,13 @@ bindings::export!(Component with_types_in bindings);
 impl bindings::exports::wasi::http::handler::Guest for Component {
     async fn handle(request: Request) -> Result<Response, ErrorCode> {
         let fields = request_headers(&request);
-        let Ok(mut headers) = to_header_map(&fields) else {
+        let Ok(headers) = policy_headers(&fields) else {
             return controlled_response(400, Vec::new(), &HeaderMap::new(), None);
         };
-        let request_id = canonical_request_id(&headers)?;
-        headers.insert(
-            REQUEST_ID_HEADER,
-            HeaderValue::from_str(&request_id).map_err(|_| ErrorCode::InternalError(None))?,
-        );
+        let request_id = canonical_request_id(&fields)?;
 
-        let environment = get_environment();
         let Ok(cors) = CORS_CONFIG
-            .get_or_init(|| load_cors_config(&environment))
+            .get_or_init(|| load_cors_config(&get_environment()))
             .as_ref()
         else {
             return controlled_response(503, retry_after(), &HeaderMap::new(), Some(&request_id));
@@ -94,7 +88,7 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
         }
 
         let Ok(authn) = AUTHN_CONFIG
-            .get_or_init(|| AuthnConfig::from_environment(&environment))
+            .get_or_init(|| AuthnConfig::from_environment(&get_environment()))
             .as_ref()
         else {
             return controlled_response(
@@ -106,16 +100,19 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
         };
         match authenticate(&headers, &request_id, authn).await {
             AuthnOutcome::Pass(context) => {
-                headers.remove(AUTHORIZATION);
-                strip_reserved_auth_headers(&mut headers);
-                insert_auth_context(&mut headers, &context)
-                    .map_err(|_| ErrorCode::InternalError(None))?;
-                headers.insert(
-                    REQUEST_ID_HEADER,
-                    HeaderValue::from_str(&request_id)
-                        .map_err(|_| ErrorCode::InternalError(None))?,
-                );
-                let request = replace_request_headers(request, &from_header_map(&headers))?;
+                let mut delete_names = vec![AUTHORIZATION.as_str()];
+                delete_names.extend(fields.iter().filter_map(|(name, _)| {
+                    name.get(.."x-wasi-auth-".len())
+                        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("x-wasi-auth-"))
+                        .then_some(name.as_str())
+                }));
+                let auth_context_header = AUTH_CONTEXT_HEADER;
+                let request_id_header = REQUEST_ID_HEADER;
+                let replacements = [
+                    (auth_context_header.as_str(), context.as_bytes()),
+                    (request_id_header.as_str(), request_id.as_bytes()),
+                ];
+                let request = edit_request_headers(request, &delete_names, &replacements)?;
                 let response = handler::handle(request).await?;
                 finalize_response(
                     response,
@@ -164,14 +161,44 @@ fn environment_value<'a>(
     Ok(value)
 }
 
-fn canonical_request_id(headers: &HeaderMap) -> Result<String, ErrorCode> {
-    RequestIdPolicy
-        .canonicalize(headers, || {
-            encode_hex(&wasip3::random::random::get_random_bytes(
-                REQUEST_ID_BYTES as u64,
-            ))
-        })
-        .map_err(|_| ErrorCode::InternalError(None))
+fn canonical_request_id(headers: &[Header]) -> Result<String, ErrorCode> {
+    let values = header_values(headers, REQUEST_ID_HEADER.as_str());
+    if let [value] = values.as_slice()
+        && let Ok(value) = std::str::from_utf8(value)
+        && is_valid_request_id(value)
+    {
+        return Ok((*value).to_owned());
+    }
+    let generated = generated_request_id();
+    is_valid_request_id(&generated)
+        .then_some(generated)
+        .ok_or(ErrorCode::InternalError(None))
+}
+
+fn policy_headers(fields: &[Header]) -> Result<HeaderMap, ()> {
+    let mut headers = HeaderMap::with_capacity(4);
+    for (name, value) in fields {
+        let selected: Option<HeaderName> = if name.eq_ignore_ascii_case(AUTHORIZATION.as_str()) {
+            Some(AUTHORIZATION)
+        } else if name.eq_ignore_ascii_case(ORIGIN.as_str()) {
+            Some(ORIGIN)
+        } else if name.eq_ignore_ascii_case(ACCESS_CONTROL_REQUEST_METHOD.as_str()) {
+            Some(ACCESS_CONTROL_REQUEST_METHOD)
+        } else if name.eq_ignore_ascii_case(ACCESS_CONTROL_REQUEST_HEADERS.as_str()) {
+            Some(ACCESS_CONTROL_REQUEST_HEADERS)
+        } else {
+            None
+        };
+        let Some(selected) = selected else {
+            continue;
+        };
+        let mut value = HeaderValue::from_bytes(value).map_err(|_| ())?;
+        if selected == AUTHORIZATION {
+            value.set_sensitive(true);
+        }
+        headers.append(selected, value);
+    }
+    Ok(headers)
 }
 
 fn rejection_response(
@@ -205,20 +232,33 @@ fn finalize_response(
     cors_headers: &HeaderMap,
     request_id: Option<&str>,
 ) -> Result<Response, ErrorCode> {
-    let fields = response_headers(&response);
-    let mut headers =
-        to_header_map(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
-    strip_reserved_auth_headers(&mut headers);
-    apply_security_headers(&mut headers);
+    let original_fields = response_headers(&response);
+    let delete_names = original_fields
+        .iter()
+        .filter_map(|(name, _)| {
+            name.get(.."x-wasi-auth-".len())
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("x-wasi-auth-"))
+                .then_some(name.as_str())
+        })
+        .collect::<Vec<_>>();
+    let cors_replacements = cors_replacements(&original_fields, cors_headers);
+    let request_id_header = REQUEST_ID_HEADER;
+    let mut replacements = vec![
+        ("x-content-type-options", b"nosniff".as_slice()),
+        (
+            "referrer-policy",
+            b"strict-origin-when-cross-origin".as_slice(),
+        ),
+    ];
     if let Some(request_id) = request_id {
-        headers.insert(
-            REQUEST_ID_HEADER,
-            HeaderValue::from_str(request_id).map_err(|_| ErrorCode::InternalError(None))?,
-        );
+        replacements.push((request_id_header.as_str(), request_id.as_bytes()));
     }
-    let mut fields = from_header_map(&headers);
-    merge_cors_headers(&mut fields, cors_headers);
-    replace_response_headers(response, &fields)
+    replacements.extend(
+        cors_replacements
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_slice())),
+    );
+    edit_response_headers(response, &delete_names, &replacements)
 }
 
 fn retry_after() -> Vec<Header> {
@@ -241,17 +281,18 @@ fn to_http_method(method: &Method) -> Result<HttpMethod, ()> {
     HttpMethod::from_bytes(value.as_bytes()).map_err(|_| ())
 }
 
-fn merge_cors_headers(target: &mut Vec<Header>, source: &HeaderMap) {
+fn cors_replacements(original: &[Header], source: &HeaderMap) -> Vec<Header> {
     let has_vary = source.contains_key(VARY);
     let mut source_without_vary = source.clone();
     source_without_vary.remove(VARY);
-    merge_header_map(target, &source_without_vary);
+    let mut replacements = from_header_map(&source_without_vary);
     if has_vary {
-        merge_vary_origin(target);
+        replacements.push((VARY_HEADER.to_owned(), merged_vary_origin(original)));
     }
+    replacements
 }
 
-fn merge_vary_origin(headers: &mut Vec<Header>) {
+fn merged_vary_origin(headers: &[Header]) -> Vec<u8> {
     let mut tokens = Vec::<String>::new();
     for value in header_values(headers, VARY_HEADER) {
         let Ok(value) = std::str::from_utf8(value) else {
@@ -264,8 +305,7 @@ fn merge_vary_origin(headers: &mut Vec<Header>) {
             .filter(|token| !token.is_empty())
         {
             if token == "*" {
-                set_header(headers, VARY_HEADER, b"*".as_slice());
-                return;
+                return b"*".to_vec();
             }
             if !tokens
                 .iter()
@@ -281,17 +321,7 @@ fn merge_vary_origin(headers: &mut Vec<Header>) {
     {
         tokens.push("Origin".to_owned());
     }
-    set_header(headers, VARY_HEADER, tokens.join(", ").into_bytes());
-}
-
-fn encode_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        output.push(char::from(HEX[usize::from(byte >> 4)]));
-        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    output
+    tokens.join(", ").into_bytes()
 }
 
 #[cfg(test)]
@@ -308,16 +338,8 @@ mod tests {
 
     #[test]
     fn vary_merge_preserves_downstream_cache_keys() {
-        let mut headers = vec![("vary".to_owned(), b"Accept-Encoding".to_vec())];
-        merge_vary_origin(&mut headers);
-        assert_eq!(
-            headers,
-            vec![("vary".to_owned(), b"Accept-Encoding, Origin".to_vec())]
-        );
-    }
-
-    #[test]
-    fn request_id_hex_encoding_is_lowercase_and_fixed_width() {
-        assert_eq!(encode_hex(&[0, 15, 16, 255]), "000f10ff");
+        let headers = vec![("vary".to_owned(), b"Accept-Encoding".to_vec())];
+        let merged = merged_vary_origin(&headers);
+        assert_eq!(merged, b"Accept-Encoding, Origin".to_vec());
     }
 }

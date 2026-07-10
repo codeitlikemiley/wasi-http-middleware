@@ -9,6 +9,7 @@
 #![deny(missing_docs)]
 
 use std::{
+    fmt,
     future::IntoFuture,
     net::IpAddr,
     sync::atomic::{AtomicUsize, Ordering},
@@ -18,9 +19,9 @@ use futures::{
     future::{Either, select},
     pin_mut,
 };
-use http::{HeaderMap, StatusCode, Uri};
+use http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use thiserror::Error;
-use wasi_http_metadata::{AuthContextV1, REQUEST_ID_HEADER};
+use wasi_http_metadata::{AuthContextV1, REQUEST_ID_HEADER, encode_auth_context};
 use wasi_http_policy_core::{
     AuthDecision, AuthnRequestV1, authorization_value, parse_authn_response,
 };
@@ -70,7 +71,7 @@ pub enum AuthnMode {
 }
 
 /// Fully validated authentication broker configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AuthnConfig {
     scheme: Scheme,
     authority: String,
@@ -79,7 +80,20 @@ pub struct AuthnConfig {
     mode: AuthnMode,
     service_id: String,
     audiences: Vec<String>,
+    anonymous_context: HeaderValue,
     max_in_flight: usize,
+}
+
+impl fmt::Debug for AuthnConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AuthnConfig")
+            .field("mode", &self.mode)
+            .field("timeout_ns", &self.timeout_ns)
+            .field("max_in_flight", &self.max_in_flight)
+            .field("deployment", &"<redacted>")
+            .finish_non_exhaustive()
+    }
 }
 
 impl AuthnConfig {
@@ -139,6 +153,8 @@ impl AuthnConfig {
             .collect::<Vec<_>>();
         let deployment = AuthContextV1::anonymous(service_id, audiences)
             .map_err(|_| AuthnConfigError::InvalidDeploymentIdentity)?;
+        let anonymous_context = encode_auth_context(&deployment)
+            .map_err(|_| AuthnConfigError::InvalidDeploymentIdentity)?;
 
         Ok(Self {
             scheme,
@@ -148,6 +164,7 @@ impl AuthnConfig {
             mode,
             service_id: deployment.service_id().to_owned(),
             audiences: deployment.audiences().to_vec(),
+            anonymous_context,
             max_in_flight,
         })
     }
@@ -210,13 +227,22 @@ pub enum AuthnConfigError {
 }
 
 /// Result of authenticating one request.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum AuthnOutcome {
-    /// The request may continue with this canonical context.
-    Pass(Box<AuthContextV1>),
+    /// The request may continue with this canonical encoded context header.
+    Pass(HeaderValue),
     /// The request must be rejected before downstream invocation.
     Reject(AuthnRejection),
+}
+
+impl fmt::Debug for AuthnOutcome {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Pass(_) => formatter.write_str("Pass(<redacted-auth-context>)"),
+            Self::Reject(rejection) => formatter.debug_tuple("Reject").field(rejection).finish(),
+        }
+    }
 }
 
 /// Fail-closed authentication rejection class.
@@ -229,8 +255,6 @@ pub enum AuthnRejection {
     MissingCredentials,
     /// Supplied credentials were rejected by the broker.
     InvalidCredentials,
-    /// The authenticated identity lacks permission at the broker boundary.
-    Forbidden,
     /// The broker was unavailable, malformed, timed out, or saturated.
     Unavailable,
 }
@@ -241,7 +265,6 @@ impl AuthnRejection {
         match self {
             Self::InvalidRequest => 400,
             Self::MissingCredentials | Self::InvalidCredentials => 401,
-            Self::Forbidden => 403,
             Self::Unavailable => 503,
         }
     }
@@ -256,9 +279,6 @@ impl AuthnRejection {
             Self::InvalidCredentials => {
                 Some(format!("Bearer realm=\"{realm}\", error=\"invalid_token\""))
             }
-            Self::Forbidden => Some(format!(
-                "Bearer realm=\"{realm}\", error=\"insufficient_scope\""
-            )),
             Self::InvalidRequest => Some(format!(
                 "Bearer realm=\"{realm}\", error=\"invalid_request\""
             )),
@@ -283,12 +303,7 @@ pub async fn authenticate(
     };
     let Some(authorization) = authorization else {
         return if config.mode == AuthnMode::Optional {
-            AuthContextV1::anonymous(config.service_id.clone(), config.audiences.clone())
-                .map(Box::new)
-                .map_or(
-                    AuthnOutcome::Reject(AuthnRejection::Unavailable),
-                    AuthnOutcome::Pass,
-                )
+            AuthnOutcome::Pass(config.anonymous_context.clone())
         } else {
             AuthnOutcome::Reject(AuthnRejection::MissingCredentials)
         };
@@ -304,13 +319,12 @@ pub async fn authenticate(
     match decision {
         AuthDecision::Allow(claims) => (*claims)
             .into_context(config.service_id.clone(), config.audiences.clone())
-            .map(Box::new)
+            .and_then(|context| encode_auth_context(&context))
             .map_or(
                 AuthnOutcome::Reject(AuthnRejection::Unavailable),
                 AuthnOutcome::Pass,
             ),
         AuthDecision::Unauthenticated => AuthnOutcome::Reject(AuthnRejection::InvalidCredentials),
-        AuthDecision::Forbidden => AuthnOutcome::Reject(AuthnRejection::Forbidden),
         AuthDecision::Unavailable => AuthnOutcome::Reject(AuthnRejection::Unavailable),
     }
 }
@@ -612,6 +626,23 @@ mod tests {
         assert_eq!(config.max_in_flight(), DEFAULT_MAX_IN_FLIGHT);
         assert_eq!(config.service_id(), "orders-api");
         assert_eq!(config.audiences(), &["api://orders", "api://orders-read"]);
+    }
+
+    #[test]
+    fn authentication_debug_output_redacts_configuration_and_context() {
+        let config = AuthnConfig::from_environment(&required_environment(
+            "https://broker-debug-sentinel.example/authenticate",
+        ))
+        .expect("valid production configuration");
+        let config_debug = format!("{config:?}");
+        assert!(config_debug.contains("redacted"));
+        assert!(!config_debug.contains("debug-sentinel"));
+
+        let outcome =
+            AuthnOutcome::Pass(HeaderValue::from_static("encoded-identity-debug-sentinel"));
+        let outcome_debug = format!("{outcome:?}");
+        assert!(outcome_debug.contains("redacted"));
+        assert!(!outcome_debug.contains("debug-sentinel"));
     }
 
     #[test]

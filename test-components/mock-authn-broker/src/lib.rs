@@ -51,6 +51,27 @@ impl wasip3::exports::http::handler::Guest for Component {
                         .to_vec(),
                 ),
             ),
+            [value] if value == b"Bearer readonly" => response(
+                200,
+                Some(
+                    br#"{"version":1,"subject":"user-readonly","issuer":"middleware-secret-issuer-sentinel","scopes":["read"],"roles":["viewer"],"acr":"urn:example:loa:2","amr":["pwd"],"decision_id":"decision-readonly","policy_revision":"mock-r1"}"#
+                        .to_vec(),
+                ),
+            ),
+            [value] if value == b"Bearer lowacr" => response(
+                200,
+                Some(
+                    br#"{"version":1,"subject":"user-lowacr","issuer":"middleware-secret-issuer-sentinel","scopes":["read","write"],"roles":["member"],"acr":"urn:example:loa:1","amr":["pwd"],"decision_id":"decision-lowacr","policy_revision":"mock-r1"}"#
+                        .to_vec(),
+                ),
+            ),
+            [value] if value == b"Bearer no-relation" => response(
+                200,
+                Some(
+                    br#"{"version":1,"subject":"user-no-relation","issuer":"middleware-secret-issuer-sentinel","scopes":["read","write"],"roles":["member"],"acr":"urn:example:loa:2","amr":["pwd"],"decision_id":"decision-no-relation","policy_revision":"mock-r1"}"#
+                        .to_vec(),
+                ),
+            ),
             [value] if value == b"Bearer deny" => response(403, None),
             [value] if value == b"Bearer error" => response(500, None),
             [value] if value == b"Bearer slow" => slow_policy_response(),

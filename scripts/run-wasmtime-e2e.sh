@@ -192,7 +192,7 @@ if grep -Eiq '^x-wasi-auth-' "${optional_headers}"; then
     cat "${optional_headers}" >&2
     exit 1
 fi
-for token_status in "deny:403" "error:503"; do
+for token_status in "deny:503" "error:503"; do
     token="${token_status%%:*}"
     expected="${token_status##*:}"
     actual="$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' \

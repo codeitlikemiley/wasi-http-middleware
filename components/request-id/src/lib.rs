@@ -3,12 +3,11 @@
 #![deny(missing_docs)]
 
 use wasi_http_middleware_component_support::{
-    replace_request_headers, replace_response_headers, request_headers, response_headers,
-    set_header, to_header_map,
+    generated_request_id, header_values, replace_request_headers, replace_response_headers,
+    request_headers, response_headers, set_header,
 };
-use wasi_http_policy_core::RequestIdPolicy;
+use wasi_http_policy_core::is_valid_request_id;
 use wasip3::http::types::{ErrorCode, Request, Response};
-use wasip3::random::random::get_random_bytes;
 
 #[allow(unknown_lints, missing_docs, clippy::same_length_and_capacity)]
 mod bindings {
@@ -18,8 +17,6 @@ mod bindings {
 use bindings::wasi::http::handler;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
-const REQUEST_ID_BYTES: usize = 16;
-
 struct Component;
 
 bindings::export!(Component with_types_in bindings);
@@ -27,7 +24,7 @@ bindings::export!(Component with_types_in bindings);
 impl bindings::exports::wasi::http::handler::Guest for Component {
     async fn handle(request: Request) -> Result<Response, ErrorCode> {
         let mut headers = request_headers(&request);
-        let request_id = canonical_request_id(&headers)?;
+        let request_id = canonical_request_id(&headers);
         set_header(&mut headers, REQUEST_ID_HEADER, request_id.as_bytes());
         let request = replace_request_headers(request, &headers)?;
 
@@ -38,32 +35,35 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
     }
 }
 
-fn canonical_request_id(headers: &[(String, Vec<u8>)]) -> Result<String, ErrorCode> {
-    let headers =
-        to_header_map(headers).map_err(|_| ErrorCode::HttpRequestHeaderSectionSize(None))?;
-    RequestIdPolicy
-        .canonicalize(&headers, || {
-            encode_hex(&get_random_bytes(REQUEST_ID_BYTES as u64))
-        })
-        .map_err(|_| ErrorCode::InternalError(None))
-}
-
-fn encode_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        output.push(char::from(HEX[usize::from(byte >> 4)]));
-        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+fn canonical_request_id(headers: &[(String, Vec<u8>)]) -> String {
+    let values = header_values(headers, REQUEST_ID_HEADER);
+    if let [value] = values.as_slice()
+        && let Ok(value) = std::str::from_utf8(value)
+        && is_valid_request_id(value)
+    {
+        return (*value).to_owned();
     }
-    output
+    generated_request_id()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::encode_hex;
+    use super::canonical_request_id;
 
     #[test]
-    fn hex_encoding_is_lowercase_and_fixed_width() {
-        assert_eq!(encode_hex(&[0, 15, 16, 255]), "000f10ff");
+    fn preserves_one_safe_request_id() {
+        let headers = vec![("x-request-id".to_owned(), b"safe.id/1".to_vec())];
+        assert_eq!(canonical_request_id(&headers), "safe.id/1");
+    }
+
+    #[test]
+    fn replaces_duplicate_request_ids() {
+        let headers = vec![
+            ("x-request-id".to_owned(), b"one".to_vec()),
+            ("X-Request-ID".to_owned(), b"two".to_vec()),
+        ];
+        let replacement = canonical_request_id(&headers);
+        assert_ne!(replacement, "one");
+        assert_ne!(replacement, "two");
     }
 }

@@ -61,6 +61,8 @@ package wasi:http@0.3.0 {
       other(option<string>),
     }
 
+    type field-value = list<u8>;
+
     type status-code = u16;
 
     record DNS-error-payload {
@@ -121,8 +123,6 @@ package wasi:http@0.3.0 {
     }
 
     type trailers = fields;
-
-    type field-value = list<u8>;
   }
   interface handler {
     use types.{request, response, error-code};
