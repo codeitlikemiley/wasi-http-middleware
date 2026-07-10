@@ -420,6 +420,27 @@ pub fn edit_response_headers(
     replacements: &[(&str, &[u8])],
 ) -> Result<Response, ErrorCode> {
     let original_headers = response.get_headers();
+    edit_response_headers_from_original(response, original_headers, delete_names, replacements)
+}
+
+/// Rebuilds `response` after applying edits while reusing an already acquired
+/// immutable header resource and field snapshot.
+///
+/// This is the allocation-minimizing form for middleware that has already
+/// inspected response fields. It performs one host header lookup and one
+/// mutable clone, then forwards status, body, and trailers unchanged. The
+/// caller may retain its own field snapshot for policy decisions.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when a requested edit or original status code
+/// cannot be applied to the forwarded response.
+pub fn edit_response_headers_from_original(
+    response: Response,
+    original_headers: Headers,
+    delete_names: &[&str],
+    replacements: &[(&str, &[u8])],
+) -> Result<Response, ErrorCode> {
     let forwarded_headers = original_headers.clone();
     drop(original_headers);
     apply_header_edits(&forwarded_headers, delete_names, replacements)

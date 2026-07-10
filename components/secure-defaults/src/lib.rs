@@ -20,8 +20,8 @@ use wasi_http_authn_runtime::{
 };
 use wasi_http_metadata::{AUTH_CONTEXT_HEADER, REQUEST_ID_HEADER};
 use wasi_http_middleware_component_support::{
-    Header, diagnostic_stage, edit_request_headers, edit_response_headers, empty_response,
-    generated_request_id, header_values, request_headers, response_headers, single_header_value,
+    Header, diagnostic_stage, edit_request_headers, edit_response_headers_from_original,
+    empty_response, generated_request_id, header_values, request_headers, single_header_value,
 };
 use wasi_http_policy_core::{CorsConfig, is_valid_request_id};
 use wasip3::{
@@ -243,7 +243,8 @@ fn finalize_response(
     cors_headers: &HeaderMap,
     request_id: Option<&str>,
 ) -> Result<Response, ErrorCode> {
-    let original_fields = response_headers(&response);
+    let original_headers = response.get_headers();
+    let original_fields = original_headers.copy_all();
     let delete_names = original_fields
         .iter()
         .filter_map(|(name, _)| {
@@ -269,7 +270,7 @@ fn finalize_response(
             .iter()
             .map(|(name, value)| (name.as_str(), value.as_slice())),
     );
-    edit_response_headers(response, &delete_names, &replacements)
+    edit_response_headers_from_original(response, original_headers, &delete_names, &replacements)
 }
 
 fn retry_after() -> Vec<Header> {
