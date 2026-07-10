@@ -74,7 +74,7 @@ jobs:
           toolchain: 1.93.0
           targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
-      - run: cargo install wasm-tools --locked --version 1.248.0
+      - run: cargo install wasm-tools --locked --version 1.253.0
       - run: cargo install wac-cli --locked --version 0.10.1
       - run: cargo install cargo-cyclonedx --locked --version 0.5.9
       - run: bash scripts/build-components.sh
@@ -107,10 +107,12 @@ jobs:
           name: middleware-components
           path: .
       - run: cargo install wac-cli --locked --version 0.10.1
-      - run: cargo install wasm-tools --locked --version 1.248.0
-      - run: cargo install wasmtime-cli --locked --version 45.0.0
+      - run: cargo install wasm-tools --locked --version 1.253.0
+      - uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613
+        with:
+          version: "46.0.1"
       - run: cargo install oha --locked --version 1.14.0
-      - name: Build pinned Spin vNext
+      - name: Build pinned experimental Spin middleware runtime
         run: |
           git clone --filter=blob:none https://github.com/spinframework/spin.git "${RUNNER_TEMP}/spin"
           git -C "${RUNNER_TEMP}/spin" checkout 27451471b8ba0faeffa01c5a4ddd6daee9a9d526

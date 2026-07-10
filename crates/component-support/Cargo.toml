@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Internal streaming-safe helpers for WASIp3 HTTP middleware components"
-publish = false
+description = "Streaming-safe helpers for WASIp3 HTTP middleware components"
 
 [dependencies]
 http.workspace = true

@@ -25,10 +25,35 @@ compat_value() {
 
 require_command() {
     local command_name="$1"
-    if ! command -v "${command_name}" >/dev/null 2>&1; then
+    if [[ "${command_name}" == */* ]]; then
+        if [[ ! -x "${command_name}" ]]; then
+            echo "error: required command is not executable: ${command_name}" >&2
+            return 1
+        fi
+    elif ! command -v "${command_name}" >/dev/null 2>&1; then
         echo "error: required command not found: ${command_name}" >&2
         return 1
     fi
+}
+
+resolve_pinned_tool() {
+    local environment_name="$1"
+    local command_name="$2"
+    local expected="$3"
+    local configured="${!environment_name:-}"
+    local cache_root="${WASI_HTTP_MIDDLEWARE_TOOL_ROOT:-${HOME}/.cache/leptos-wasi-tools}"
+    local cached="${cache_root}/${command_name}-${expected}/${command_name}"
+    local selected
+
+    if [[ -n "${configured}" ]]; then
+        selected="${configured}"
+    elif [[ -x "${cached}" ]]; then
+        selected="${cached}"
+    else
+        selected="${command_name}"
+    fi
+    require_version "${selected}" "${expected}"
+    printf '%s\n' "${selected}"
 }
 
 require_version() {

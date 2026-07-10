@@ -5,7 +5,7 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 wasmtime_version="$(compat_value wasmtime)"
-require_version wasmtime "${wasmtime_version}"
+wasmtime_bin="$(resolve_pinned_tool WASMTIME_BIN wasmtime "${wasmtime_version}")"
 require_command curl
 
 echo_component="${E2E_APP_COMPONENT:-$(test_component_file echo-service)}"
@@ -38,7 +38,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-wasmtime serve \
+"${wasmtime_bin}" serve \
     -W component-model-async=y \
     -S p3=y \
     -S cli=y \
@@ -63,7 +63,7 @@ if [[ "${policy_ready}" != "true" ]]; then
     exit 1
 fi
 
-wasmtime serve \
+"${wasmtime_bin}" serve \
     -W component-model-async=y \
     -S p3=y \
     -S cli=y \

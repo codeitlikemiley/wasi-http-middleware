@@ -4,7 +4,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-spin_revision="$(compat_value spin_runtime_revision)"
+spin_revision="$(compat_value spin_middleware_revision)"
 spin_short_revision="${spin_revision:0:7}"
 spin_bin="${SPIN_BIN:-spin}"
 if ! command -v "${spin_bin}" >/dev/null 2>&1; then
@@ -18,7 +18,7 @@ if [[ "${spin_version}" != *"${spin_short_revision}"* ]]; then
 fi
 
 wasmtime_version="$(compat_value wasmtime)"
-require_version wasmtime "${wasmtime_version}"
+wasmtime_bin="$(resolve_pinned_tool WASMTIME_BIN wasmtime "${wasmtime_version}")"
 require_command curl
 require_command python3
 
@@ -59,7 +59,7 @@ trap cleanup EXIT
 python3 "${REPO_ROOT}/scripts/check-spin-fixtures.py"
 python3 "${REPO_ROOT}/scripts/audit-spin-manifest.py" "${full_manifest}"
 
-wasmtime serve \
+"${wasmtime_bin}" serve \
     -W component-model-async=y \
     -S p3=y \
     -S cli=y \

@@ -4,8 +4,8 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-require_version wasmtime "$(compat_value wasmtime)"
-require_version wac "$(compat_value wac)"
+wasmtime_bin="$(resolve_pinned_tool WASMTIME_BIN wasmtime "$(compat_value wasmtime)")"
+wac_bin="$(resolve_pinned_tool WAC_BIN wac "$(compat_value wac)")"
 require_version oha "$(compat_value oha)"
 require_command curl
 require_command python3
@@ -19,11 +19,11 @@ rm -f "${report_directory}/wasmtime-"*.json
 
 terminal="$(test_component_file echo-service)"
 cp "${terminal}" "${benchmark_artifacts}/baseline.wasm"
-wac plug --plug "${terminal}" "$(test_component_file passthrough)" \
+"${wac_bin}" plug --plug "${terminal}" "$(test_component_file passthrough)" \
     --output "${benchmark_artifacts}/passthrough.wasm"
-wac plug --plug "${terminal}" "$(component_file request-id)" \
+"${wac_bin}" plug --plug "${terminal}" "$(component_file request-id)" \
     --output "${benchmark_artifacts}/request-id.wasm"
-wac plug --plug "${terminal}" "$(component_file security-headers)" \
+"${wac_bin}" plug --plug "${terminal}" "$(component_file security-headers)" \
     --output "${benchmark_artifacts}/security-headers.wasm"
 
 port="${BENCHMARK_PORT:-19200}"
@@ -43,7 +43,7 @@ measure() {
     local artifact="${benchmark_artifacts}/${profile}.wasm"
     local log="${temporary_directory}/${profile}-${run}.log"
 
-    wasmtime serve \
+    "${wasmtime_bin}" serve \
         -W component-model-async=y \
         -S p3=y \
         -S cli=y \

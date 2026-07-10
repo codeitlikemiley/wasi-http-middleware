@@ -6,7 +6,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 wasm_tools_version="$(compat_value wasm_tools)"
 wasi_http_version="$(compat_value wasi_http)"
-require_version wasm-tools "${wasm_tools_version}"
+wasm_tools_bin="$(resolve_pinned_tool WASM_TOOLS_BIN wasm-tools "${wasm_tools_version}")"
 require_command python3
 
 python3 "${REPO_ROOT}/scripts/test_audit_spin_manifest.py"
@@ -173,9 +173,9 @@ for component in "${COMPONENTS[@]}" "${CONFORMANCE_COMPONENTS[@]}"; do
     report="${REPORT_ROOT}/wit/${component}.wit"
     require_file "${artifact}"
 
-    wasm-tools validate --features component-model,cm-async "${artifact}"
+    "${wasm_tools_bin}" validate --features component-model,cm-async "${artifact}"
     temporary_report="${report}.tmp"
-    wasm-tools component wit "${artifact}" >"${temporary_report}"
+    "${wasm_tools_bin}" component wit "${artifact}" >"${temporary_report}"
     mv "${temporary_report}" "${report}"
 
     check_handler_contract "${component}" "${report}"

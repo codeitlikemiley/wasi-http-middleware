@@ -61,7 +61,7 @@ fn delayed_response() -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
-    wit_bindgen::spawn(async move {
+    wasip3::spawn(async move {
         let remaining = writer.write_all(b"first\n".to_vec()).await;
         if !remaining.is_empty() {
             return;
@@ -81,7 +81,7 @@ fn failing_stream_response() -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
-    wit_bindgen::spawn(async move {
+    wasip3::spawn(async move {
         let remaining = writer.write_all(b"partial body\n".to_vec()).await;
         drop(remaining);
     });
@@ -97,7 +97,7 @@ fn trailers_response() -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
-    wit_bindgen::spawn(async move {
+    wasip3::spawn(async move {
         let remaining = writer.write_all(b"body with trailer\n".to_vec()).await;
         drop(remaining);
     });
@@ -148,7 +148,7 @@ fn response(
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let body = body.map(|body| {
         let (mut writer, reader) = wit_stream::new();
-        wit_bindgen::spawn(async move {
+        wasip3::spawn(async move {
             let remaining = writer.write_all(body).await;
             drop(remaining);
         });

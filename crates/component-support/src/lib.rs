@@ -12,27 +12,33 @@ use wasip3::wit_future;
 /// resource types for every shared interface.
 ///
 /// Invoke this macro inside a private `bindings` module in each component.
+/// The path is resolved relative to the invoking crate, allowing published
+/// consumers to provide their own pinned WIT package directory.
 #[macro_export]
 macro_rules! generate_middleware_bindings {
-    () => {
+    ($path:literal) => {
         ::wit_bindgen::generate!({
-            path: "../../wit",
+            path: $path,
             world: "wasi:http/middleware",
             with: {
-                "wasi:http/types@0.3.0-rc-2026-03-15": ::wasip3::http::types,
-                "wasi:http/client@0.3.0-rc-2026-03-15": ::wasip3::http::client,
-                "wasi:random/random@0.3.0-rc-2026-03-15": ::wasip3::random::random,
-                "wasi:random/insecure@0.3.0-rc-2026-03-15": ::wasip3::random::insecure,
-                "wasi:random/insecure-seed@0.3.0-rc-2026-03-15": ::wasip3::random::insecure_seed,
-                "wasi:cli/stdout@0.3.0-rc-2026-03-15": ::wasip3::cli::stdout,
-                "wasi:cli/stderr@0.3.0-rc-2026-03-15": ::wasip3::cli::stderr,
-                "wasi:cli/stdin@0.3.0-rc-2026-03-15": ::wasip3::cli::stdin,
-                "wasi:cli/types@0.3.0-rc-2026-03-15": ::wasip3::cli::types,
-                "wasi:clocks/monotonic-clock@0.3.0-rc-2026-03-15": ::wasip3::clocks::monotonic_clock,
-                "wasi:clocks/system-clock@0.3.0-rc-2026-03-15": ::wasip3::clocks::system_clock,
-                "wasi:clocks/types@0.3.0-rc-2026-03-15": ::wasip3::clocks::types,
+                "wasi:http/types@0.3.0": ::wasip3::http::types,
+                "wasi:http/client@0.3.0": ::wasip3::http::client,
+                "wasi:random/random@0.3.0": ::wasip3::random::random,
+                "wasi:random/insecure@0.3.0": ::wasip3::random::insecure,
+                "wasi:random/insecure-seed@0.3.0": ::wasip3::random::insecure_seed,
+                "wasi:cli/stdout@0.3.0": ::wasip3::cli::stdout,
+                "wasi:cli/stderr@0.3.0": ::wasip3::cli::stderr,
+                "wasi:cli/stdin@0.3.0": ::wasip3::cli::stdin,
+                "wasi:cli/types@0.3.0": ::wasip3::cli::types,
+                "wasi:clocks/monotonic-clock@0.3.0": ::wasip3::clocks::monotonic_clock,
+                "wasi:clocks/system-clock@0.3.0": ::wasip3::clocks::system_clock,
+                "wasi:clocks/types@0.3.0": ::wasip3::clocks::types,
             },
         });
+    };
+
+    () => {
+        $crate::generate_middleware_bindings!("../../wit");
     };
 }
 

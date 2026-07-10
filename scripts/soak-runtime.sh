@@ -9,7 +9,7 @@ duration="${SOAK_DURATION:-10m}"
 concurrency="${SOAK_CONCURRENCY:-100}"
 queries_per_second="${SOAK_QPS:-100}"
 sample_seconds="${SOAK_SAMPLE_SECONDS:-5}"
-require_version wasmtime "$(compat_value wasmtime)"
+wasmtime_bin="$(resolve_pinned_tool WASMTIME_BIN wasmtime "$(compat_value wasmtime)")"
 require_version oha "$(compat_value oha)"
 require_command curl
 require_command python3
@@ -27,7 +27,7 @@ case "${host}" in
     spin)
         app_port="19100"
         policy_port="19101"
-        spin_revision="$(compat_value spin_runtime_revision)"
+        spin_revision="$(compat_value spin_middleware_revision)"
         spin_short_revision="${spin_revision:0:7}"
         spin_bin="${SPIN_BIN:-spin}"
         if ! command -v "${spin_bin}" >/dev/null 2>&1; then
@@ -70,7 +70,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-wasmtime serve \
+"${wasmtime_bin}" serve \
     -W component-model-async=y \
     -S p3=y \
     -S cli=y \
@@ -94,7 +94,7 @@ if [[ "${host}" == "wasmtime" ]]; then
     composed="${ARTIFACT_ROOT}/composed/soak-full-chain.wasm"
     bash "${REPO_ROOT}/scripts/compose-wasmtime.sh" \
         "$(test_component_file echo-service)" "${composed}"
-    wasmtime serve \
+    "${wasmtime_bin}" serve \
         -W component-model-async=y \
         -S p3=y \
         -S cli=y \

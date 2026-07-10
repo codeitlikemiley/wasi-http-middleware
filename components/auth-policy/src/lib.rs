@@ -15,6 +15,7 @@ use wasi_http_policy_core::{
     AuthDecision, PolicyRequest, RequestIdPolicy, authorization_value, normalize_policy_path,
     parse_policy_response,
 };
+use wasip3::wit_bindgen::StreamResult;
 use wasip3::{
     cli::environment::get_environment,
     clocks::monotonic_clock,
@@ -24,7 +25,6 @@ use wasip3::{
     },
     wit_future, wit_stream,
 };
-use wit_bindgen::StreamResult;
 
 #[allow(missing_docs)]
 mod bindings {
@@ -265,7 +265,7 @@ fn build_policy_http_request(
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpRequestHeaderSectionSize(None))?;
     let (mut body_writer, body_reader) = wit_stream::new();
-    wit_bindgen::spawn(async move {
+    wasip3::spawn(async move {
         let remaining = body_writer.write_all(body).await;
         drop(remaining);
     });

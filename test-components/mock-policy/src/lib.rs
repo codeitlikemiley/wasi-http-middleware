@@ -2,12 +2,12 @@
 
 #![deny(missing_docs)]
 
+use wasip3::wit_bindgen::StreamResult;
 use wasip3::{
     clocks::monotonic_clock::wait_for,
     http::types::{ErrorCode, Headers, Method, Request, Response},
     wit_future, wit_stream,
 };
-use wit_bindgen::StreamResult;
 
 struct Component;
 
@@ -90,7 +90,7 @@ fn slow_policy_response() -> Result<Response, ErrorCode> {
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let chunks = body.chunks(10).map(<[u8]>::to_vec).collect::<Vec<_>>();
     let (mut writer, reader) = wit_stream::new();
-    wit_bindgen::spawn(async move {
+    wasip3::spawn(async move {
         for (index, chunk) in chunks.into_iter().enumerate() {
             if index > 0 {
                 wait_for(400_000_000).await;
@@ -120,7 +120,7 @@ fn response(status: u16, body: Option<Vec<u8>>) -> Result<Response, ErrorCode> {
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let body = body.map(|body| {
         let (mut writer, reader) = wit_stream::new();
-        wit_bindgen::spawn(async move {
+        wasip3::spawn(async move {
             let remaining = writer.write_all(body).await;
             drop(remaining);
         });
