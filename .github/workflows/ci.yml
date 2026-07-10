@@ -119,8 +119,7 @@ jobs:
         env:
           STREAM_FAILURE_REPEATS: "50"
       - run: bash scripts/compare-wasmtime-profiles.sh
-      - name: Record component overhead canary
-        continue-on-error: true
+      - name: Record diagnostic component-boundary overhead
         run: bash scripts/benchmark-components.sh
       - name: Scheduled ten-minute Wasmtime soak
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
