@@ -10,6 +10,7 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FULL_PATH = ROOT / "fixtures/spin/full-chain/spin.toml"
 PUBLIC_PATH = ROOT / "fixtures/spin/public-stack/spin.toml"
+COMPOSED_PATH = ROOT / "fixtures/spin/composed-final/spin.toml"
 
 
 def load(path: pathlib.Path) -> dict:
@@ -25,7 +26,8 @@ def stack(manifest: dict) -> list[str]:
 def main() -> int:
     full = load(FULL_PATH)
     public = load(PUBLIC_PATH)
-    assert stack(full) == ["request-id", "security-headers", "cors", "auth-policy"]
+    composed = load(COMPOSED_PATH)
+    assert stack(full) == ["request-id", "security-headers", "cors", "authn-policy"]
     assert stack(public) == ["request-id", "security-headers", "cors"]
 
     full_components = full["component"]
@@ -37,13 +39,22 @@ def main() -> int:
     public_environment = public_components["application"]["environment"]
     assert full_environment["WASI_MIDDLEWARE_CORS_ORIGINS"] == "https://app.example"
     assert public_environment["WASI_MIDDLEWARE_CORS_ORIGINS"] == "https://public.example"
-    assert "WASI_MIDDLEWARE_POLICY_URL" in full_environment
-    assert "WASI_MIDDLEWARE_POLICY_URL" not in public_environment
+    assert "WASI_MIDDLEWARE_AUTHN_BROKER_URL" in full_environment
+    assert "WASI_MIDDLEWARE_AUTHN_BROKER_URL" not in public_environment
+    assert full_environment["WASI_MIDDLEWARE_SERVICE_ID"] == "echo-service"
+    assert full_environment["WASI_MIDDLEWARE_AUTHN_AUDIENCES"] == "echo-service"
     assert full_components["application"]["allowed_outbound_hosts"] == [
         "http://127.0.0.1:19101"
     ]
     assert "allowed_outbound_hosts" not in public_components["application"]
-    print("Spin fixtures reuse artifacts with isolated stacks and configuration")
+    composed_application = composed["component"]["application"]
+    assert composed_application["source"] == "../../../artifacts/composed/full-chain.wasm"
+    assert composed_application["environment"] == full_environment
+    assert composed_application["allowed_outbound_hosts"] == [
+        "http://127.0.0.1:19101"
+    ]
+    assert "dependencies" not in composed["trigger"]["http"][0]
+    print("Spin canary fixtures preserve isolated final-WASI stacks and configuration")
     return 0
 
 

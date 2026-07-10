@@ -10,7 +10,7 @@ import sys
 import tomllib
 import urllib.parse
 
-EXPECTED = ["request-id", "security-headers", "cors", "auth-policy"]
+EXPECTED = ["request-id", "security-headers", "cors", "authn-policy"]
 
 
 def component_name(entry: object) -> str | None:
@@ -79,11 +79,11 @@ def audit(path: pathlib.Path, allowed_routes: list[str]) -> list[str]:
             errors.append(f"route {route!r} references an unknown primary component")
             continue
         environment = primary.get("environment", {})
-        policy_url = environment.get("WASI_MIDDLEWARE_POLICY_URL") if isinstance(environment, dict) else None
-        if not isinstance(policy_url, str):
-            errors.append(f"route {route!r} has no middleware policy URL")
+        broker_url = environment.get("WASI_MIDDLEWARE_AUTHN_BROKER_URL") if isinstance(environment, dict) else None
+        if not isinstance(broker_url, str):
+            errors.append(f"route {route!r} has no authentication broker URL")
             continue
-        parsed = urllib.parse.urlsplit(policy_url)
+        parsed = urllib.parse.urlsplit(broker_url)
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.hostname
@@ -91,13 +91,31 @@ def audit(path: pathlib.Path, allowed_routes: list[str]) -> list[str]:
             or parsed.password is not None
             or parsed.fragment
         ):
-            errors.append(f"route {route!r} has an invalid middleware policy URL")
+            errors.append(f"route {route!r} has an invalid authentication broker URL")
             continue
         try:
             port = parsed.port
         except ValueError:
-            errors.append(f"route {route!r} has an invalid middleware policy port")
+            errors.append(f"route {route!r} has an invalid authentication broker port")
             continue
+        insecure_loopback = environment.get(
+            "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK"
+        ) == "true"
+        spin_service = parsed.hostname.removesuffix(".spin.internal")
+        spin_internal = (
+            parsed.hostname.endswith(".spin.internal")
+            and bool(spin_service)
+            and "." not in spin_service
+        )
+        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme == "http" and not (spin_internal or (loopback and insecure_loopback)):
+            errors.append(
+                f"route {route!r} uses HTTP outside the Spin-internal or explicit loopback exception"
+            )
+        service_id = environment.get("WASI_MIDDLEWARE_SERVICE_ID")
+        audiences = environment.get("WASI_MIDDLEWARE_AUTHN_AUDIENCES", "").split(",")
+        if not isinstance(service_id, str) or service_id not in audiences:
+            errors.append(f"route {route!r} has invalid service/audience binding")
         host = parsed.hostname
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
@@ -107,7 +125,7 @@ def audit(path: pathlib.Path, allowed_routes: list[str]) -> list[str]:
         allowed_hosts = primary.get("allowed_outbound_hosts")
         if allowed_hosts != [expected_host]:
             errors.append(
-                f"route {route!r} auth must inherit only policy host "
+                f"route {route!r} authn must inherit only broker host "
                 f"{expected_host!r}, found {allowed_hosts!r}"
             )
 

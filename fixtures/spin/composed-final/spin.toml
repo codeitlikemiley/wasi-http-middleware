@@ -1,21 +1,15 @@
 spin_manifest_version = 2
 
 [application]
-name = "wasi-http-middleware-full-chain"
+name = "wasi-http-middleware-composed-final-canary"
 version = "0.1.0-alpha.1"
 
 [[trigger.http]]
 route = "/..."
 component = "application"
-dependencies.middleware = [
-  { component = "request-id" },
-  { component = "security-headers" },
-  { component = "cors", inherit_configuration = ["environment"] },
-  { component = "authn-policy", inherit_configuration = ["environment", "allowed_outbound_hosts"] },
-]
 
 [component.application]
-source = "../../../artifacts/test-components/echo-service.wasm"
+source = "../../../artifacts/composed/full-chain.wasm"
 allowed_outbound_hosts = ["http://127.0.0.1:19101"]
 
 [component.application.environment]
@@ -30,15 +24,3 @@ WASI_MIDDLEWARE_SERVICE_ID = "echo-service"
 WASI_MIDDLEWARE_AUTHN_AUDIENCES = "echo-service"
 WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT = "64"
 WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK = "true"
-
-[component.request-id]
-source = "../../../artifacts/components/request-id.wasm"
-
-[component.security-headers]
-source = "../../../artifacts/components/security-headers.wasm"
-
-[component.cors]
-source = "../../../artifacts/components/cors.wasm"
-
-[component.authn-policy]
-source = "../../../artifacts/components/authn-policy.wasm"
