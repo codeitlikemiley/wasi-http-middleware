@@ -16,7 +16,7 @@ use http::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use wasi_http_metadata::{Principal, REQUEST_ID_HEADER};
+use wasi_http_metadata::{ActorV1, AuthContextV1, MetadataError, PrincipalV1, REQUEST_ID_HEADER};
 
 /// Maximum accepted request ID size.
 pub const MAX_REQUEST_ID_LEN: usize = 128;
@@ -353,9 +353,15 @@ impl CorsDecision {
     }
 }
 
-/// Minimal information sent to an external authorization policy service.
+/// Version-one request sent to an external authentication broker.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct PolicyRequest {
+pub struct AuthnRequestV1 {
+    /// Authentication broker request schema version.
+    pub version: u8,
+    /// Immutable terminal-service identifier.
+    pub service_id: String,
+    /// Immutable configured audiences.
+    pub audiences: Vec<String>,
     /// Incoming HTTP method.
     pub method: String,
     /// Incoming URI scheme when known.
@@ -444,20 +450,85 @@ fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
-/// Successful policy-service response body.
+/// Successful authentication-broker response body.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-pub struct PolicySuccess {
+#[serde(deny_unknown_fields)]
+struct AuthnSuccessV1 {
+    version: u8,
     subject: String,
     issuer: String,
+    tenant_id: Option<String>,
+    #[serde(default)]
+    roles: Vec<String>,
     #[serde(default)]
     scopes: Vec<String>,
+    acr: Option<String>,
+    #[serde(default)]
+    amr: Vec<String>,
+    actor: Option<AuthnActorV1>,
+    auth_time: Option<u64>,
+    expires_at: Option<u64>,
+    session_id: Option<String>,
+    decision_id: String,
+    policy_revision: String,
 }
 
-/// Authentication decision returned by the policy bridge.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct AuthnActorV1 {
+    issuer: String,
+    subject: String,
+}
+
+/// Broker-validated claims awaiting binding to deployment configuration.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthenticatedClaimsV1 {
+    principal: PrincipalV1,
+    decision_id: String,
+    policy_revision: String,
+}
+
+impl AuthenticatedClaimsV1 {
+    /// Binds broker claims to immutable service and audience configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetadataError`] if deployment configuration is invalid.
+    pub fn into_context(
+        self,
+        service_id: impl Into<String>,
+        audiences: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Result<AuthContextV1, MetadataError> {
+        AuthContextV1::authenticated(
+            service_id,
+            audiences,
+            self.principal,
+            self.decision_id,
+            self.policy_revision,
+        )
+    }
+
+    /// Returns the canonical authenticated principal.
+    pub fn principal(&self) -> &PrincipalV1 {
+        &self.principal
+    }
+
+    /// Returns the broker decision identifier.
+    pub fn decision_id(&self) -> &str {
+        &self.decision_id
+    }
+
+    /// Returns the authentication policy revision.
+    pub fn policy_revision(&self) -> &str {
+        &self.policy_revision
+    }
+}
+
+/// Authentication decision returned by the broker bridge.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthDecision {
-    /// Authentication and coarse policy checks succeeded.
-    Allow(Principal),
+    /// Authentication succeeded and claims passed strict validation.
+    Allow(Box<AuthenticatedClaimsV1>),
     /// No acceptable identity was supplied.
     Unauthenticated,
     /// Identity was valid but the coarse policy denied access.
@@ -488,19 +559,53 @@ pub fn authorization_value(headers: &HeaderMap) -> Result<Option<&str>, PolicyEr
     Ok(Some(value))
 }
 
-/// Converts an external policy response into a fail-closed decision.
-pub fn parse_policy_response(status: StatusCode, body: &[u8]) -> AuthDecision {
+/// Converts an authentication-broker response into a fail-closed decision.
+pub fn parse_authn_response(status: StatusCode, body: &[u8]) -> AuthDecision {
     match status {
-        StatusCode::OK => serde_json::from_slice::<PolicySuccess>(body)
+        StatusCode::OK => serde_json::from_slice::<AuthnSuccessV1>(body)
             .ok()
-            .and_then(|success| {
-                Principal::new(success.subject, success.issuer, success.scopes).ok()
-            })
-            .map_or(AuthDecision::Unavailable, AuthDecision::Allow),
+            .and_then(authenticated_claims)
+            .map_or(AuthDecision::Unavailable, |claims| {
+                AuthDecision::Allow(Box::new(claims))
+            }),
         StatusCode::UNAUTHORIZED => AuthDecision::Unauthenticated,
         StatusCode::FORBIDDEN => AuthDecision::Forbidden,
         _ => AuthDecision::Unavailable,
     }
+}
+
+fn authenticated_claims(success: AuthnSuccessV1) -> Option<AuthenticatedClaimsV1> {
+    if success.version != 1 {
+        return None;
+    }
+    let actor = success
+        .actor
+        .map(|actor| ActorV1::new(actor.issuer, actor.subject))
+        .transpose()
+        .ok()?;
+    let principal = PrincipalV1::new(success.issuer, success.subject)
+        .and_then(|principal| principal.with_tenant_id(success.tenant_id))
+        .and_then(|principal| principal.with_roles(success.roles))
+        .and_then(|principal| principal.with_scopes(success.scopes))
+        .and_then(|principal| principal.with_acr(success.acr))
+        .and_then(|principal| principal.with_amr(success.amr))
+        .map(|principal| principal.with_actor(actor))
+        .and_then(|principal| principal.with_times(success.auth_time, success.expires_at))
+        .and_then(|principal| principal.with_session_id(success.session_id))
+        .ok()?;
+    AuthContextV1::authenticated(
+        "validation",
+        ["validation"],
+        principal.clone(),
+        &success.decision_id,
+        &success.policy_revision,
+    )
+    .ok()?;
+    Some(AuthenticatedClaimsV1 {
+        principal,
+        decision_id: success.decision_id,
+        policy_revision: success.policy_revision,
+    })
 }
 
 fn single_text_header(headers: &HeaderMap, name: HeaderName) -> Result<Option<&str>, PolicyError> {
@@ -723,20 +828,30 @@ mod tests {
     }
 
     #[test]
-    fn policy_response_fails_closed_on_malformed_success() {
-        let decision = parse_policy_response(StatusCode::OK, br#"{"subject":"missing"}"#);
+    fn authn_response_fails_closed_on_malformed_success() {
+        let decision = parse_authn_response(StatusCode::OK, br#"{"subject":"missing"}"#);
 
         assert_eq!(decision, AuthDecision::Unavailable);
     }
 
     #[test]
-    fn policy_response_builds_valid_principal() {
-        let decision = parse_policy_response(
+    fn authn_response_builds_valid_versioned_claims() {
+        let decision = parse_authn_response(
             StatusCode::OK,
-            br#"{"subject":"user-1","issuer":"mock","scopes":["read"]}"#,
+            br#"{"version":1,"subject":"user-1","issuer":"mock","scopes":["read"],"acr":"loa2","amr":["pwd"],"actor":{"issuer":"workload","subject":"job-1"},"decision_id":"decision-1","policy_revision":"revision-1"}"#,
         );
 
-        assert!(matches!(decision, AuthDecision::Allow(_)));
+        let AuthDecision::Allow(claims) = decision else {
+            panic!("valid broker response must authenticate");
+        };
+        assert_eq!(claims.principal().identity_key(), ("mock", "user-1"));
+        assert_eq!(claims.principal().acr(), Some("loa2"));
+        assert_eq!(
+            claims.principal().actor().map(ActorV1::identity_key),
+            Some(("workload", "job-1"))
+        );
+        assert_eq!(claims.decision_id(), "decision-1");
+        assert_eq!(claims.policy_revision(), "revision-1");
     }
 
     #[test]

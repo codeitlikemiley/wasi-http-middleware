@@ -9,9 +9,11 @@ repository.workspace = true
 description = "Trusted HTTP metadata contract for composed WASI middleware"
 
 [dependencies]
+base64 = "0.22.1"
 http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [lints]
 workspace = true
-

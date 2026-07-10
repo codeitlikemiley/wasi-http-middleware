@@ -6,14 +6,16 @@ use std::{borrow::Cow, sync::OnceLock};
 
 use http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use thiserror::Error;
-use wasi_http_metadata::{REQUEST_ID_HEADER, insert_principal, strip_reserved_auth_headers};
+use wasi_http_metadata::{
+    AuthContextV1, REQUEST_ID_HEADER, insert_auth_context, strip_reserved_auth_headers,
+};
 use wasi_http_middleware_component_support::{
     Header, empty_response, from_header_map, replace_request_headers, request_headers,
     to_header_map,
 };
 use wasi_http_policy_core::{
-    AuthDecision, PolicyRequest, RequestIdPolicy, authorization_value, normalize_policy_path,
-    parse_policy_response,
+    AuthDecision, AuthnRequestV1, RequestIdPolicy, authorization_value, normalize_policy_path,
+    parse_authn_response,
 };
 use wasip3::wit_bindgen::StreamResult;
 use wasip3::{
@@ -35,6 +37,8 @@ use bindings::wasi::http::handler;
 
 const POLICY_URL: &str = "WASI_MIDDLEWARE_POLICY_URL";
 const POLICY_TIMEOUT_MS: &str = "WASI_MIDDLEWARE_POLICY_TIMEOUT_MS";
+const SERVICE_ID: &str = "WASI_MIDDLEWARE_SERVICE_ID";
+const AUDIENCES: &str = "WASI_MIDDLEWARE_AUTHN_AUDIENCES";
 const DEFAULT_TIMEOUT_MS: u64 = 2_000;
 const MAX_TIMEOUT_MS: u64 = 60_000;
 const MAX_POLICY_RESPONSE_SIZE: usize = 64 * 1024;
@@ -48,6 +52,8 @@ struct AuthConfig {
     authority: String,
     path_with_query: String,
     timeout_ns: u64,
+    service_id: String,
+    audiences: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Error)]
@@ -60,6 +66,10 @@ enum ConfigError {
     InvalidTimeout,
     #[error("duplicate middleware environment key")]
     DuplicateEnvironment,
+    #[error("missing service identity configuration")]
+    MissingServiceIdentity,
+    #[error("invalid service identity configuration")]
+    InvalidServiceIdentity,
 }
 
 #[derive(Clone, Copy, Debug, Error)]
@@ -107,7 +117,7 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             HeaderValue::from_str(&request_id).map_err(|_| ErrorCode::InternalError(None))?,
         );
 
-        let Ok(policy_request) = policy_request_for(&request, &request_id) else {
+        let Ok(policy_request) = policy_request_for(&request, &request_id, config) else {
             return rejection_response(400, &request_id);
         };
         let decision = match call_policy(config, &policy_request, authorization.as_deref()).await {
@@ -116,8 +126,11 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
         };
 
         match decision {
-            AuthDecision::Allow(principal) => {
-                insert_principal(&mut headers, &principal)
+            AuthDecision::Allow(claims) => {
+                let context = (*claims)
+                    .into_context(config.service_id.clone(), config.audiences.clone())
+                    .map_err(|_| ErrorCode::InternalError(None))?;
+                insert_auth_context(&mut headers, &context)
                     .map_err(|_| ErrorCode::InternalError(None))?;
                 let canonical_fields = from_header_map(&headers);
                 let request = replace_request_headers(request, &canonical_fields)?;
@@ -161,12 +174,25 @@ fn load_config(environment: &[(String, String)]) -> Result<AuthConfig, ConfigErr
     if timeout_ms == 0 || timeout_ms > MAX_TIMEOUT_MS {
         return Err(ConfigError::InvalidTimeout);
     }
+    let service_id = environment_value(environment, SERVICE_ID)?
+        .ok_or(ConfigError::MissingServiceIdentity)?
+        .to_owned();
+    let audiences = environment_value(environment, AUDIENCES)?
+        .ok_or(ConfigError::MissingServiceIdentity)?
+        .split(',')
+        .map(str::trim)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    AuthContextV1::anonymous(service_id.clone(), audiences.clone())
+        .map_err(|_| ConfigError::InvalidServiceIdentity)?;
 
     Ok(AuthConfig {
         scheme,
         authority,
         path_with_query,
         timeout_ns: timeout_ms.saturating_mul(1_000_000),
+        service_id,
+        audiences,
     })
 }
 
@@ -195,7 +221,11 @@ fn canonical_request_id(headers: &HeaderMap) -> Result<String, ErrorCode> {
         .map_err(|_| ErrorCode::InternalError(None))
 }
 
-fn policy_request_for(request: &Request, request_id: &str) -> Result<PolicyRequest, ()> {
+fn policy_request_for(
+    request: &Request,
+    request_id: &str,
+    config: &AuthConfig,
+) -> Result<AuthnRequestV1, ()> {
     let method_value = request.get_method();
     let method = method_text(&method_value).into_owned();
     let scheme = request
@@ -207,7 +237,10 @@ fn policy_request_for(request: &Request, request_id: &str) -> Result<PolicyReque
         .unwrap_or_else(|| "/".to_owned());
     let path = normalize_policy_path(&path_with_query).map_err(|_| ())?;
 
-    Ok(PolicyRequest {
+    Ok(AuthnRequestV1 {
+        version: 1,
+        service_id: config.service_id.clone(),
+        audiences: config.audiences.clone(),
         method,
         scheme,
         authority,
@@ -218,7 +251,7 @@ fn policy_request_for(request: &Request, request_id: &str) -> Result<PolicyReque
 
 async fn call_policy(
     config: &AuthConfig,
-    policy_request: &PolicyRequest,
+    policy_request: &AuthnRequestV1,
     authorization: Option<&str>,
 ) -> Result<AuthDecision, PolicyCallError> {
     let started = monotonic_clock::now();
@@ -235,7 +268,7 @@ async fn call_policy(
     let status = StatusCode::from_u16(response.get_status_code())
         .map_err(|_| PolicyCallError::InvalidStatus)?;
     let body = collect_policy_response(response, started, config.timeout_ns).await?;
-    Ok(parse_policy_response(status, &body))
+    Ok(parse_authn_response(status, &body))
 }
 
 fn build_policy_http_request(

@@ -29,7 +29,7 @@ impl wasip3::exports::http::handler::Guest for Component {
             [value] if value == b"Bearer allow" => response(
                 200,
                 Some(
-                    br#"{"subject":"user-1","issuer":"middleware-secret-issuer-sentinel","scopes":["read","write"]}"#
+                    br#"{"version":1,"subject":"user-1","issuer":"middleware-secret-issuer-sentinel","scopes":["read","write"],"roles":["member"],"acr":"urn:example:loa:2","amr":["pwd"],"decision_id":"decision-allow","policy_revision":"mock-r1"}"#
                         .to_vec(),
                 ),
             ),
@@ -40,7 +40,7 @@ impl wasip3::exports::http::handler::Guest for Component {
             [value] if value == b"Bearer invalid-identity" => response(
                 200,
                 Some(
-                    br#"{"subject":"bad\r\nsubject","issuer":"issuer","scopes":["read"]}"#
+                    br#"{"version":1,"subject":"bad\r\nsubject","issuer":"issuer","scopes":["read"],"decision_id":"decision-invalid","policy_revision":"mock-r1"}"#
                         .to_vec(),
                 ),
             ),
@@ -70,14 +70,14 @@ async fn drain_request(request: Request) -> Result<(), ErrorCode> {
 }
 
 fn sized_policy_response(size: usize) -> Result<Response, ErrorCode> {
-    let mut body = br#"{"subject":"sized-user","issuer":"issuer","scopes":["read"]}"#.to_vec();
+    let mut body = br#"{"version":1,"subject":"sized-user","issuer":"issuer","scopes":["read"],"decision_id":"decision-sized","policy_revision":"mock-r1"}"#.to_vec();
     body.resize(size, b' ');
     response(200, Some(body))
 }
 
 fn slow_policy_response() -> Result<Response, ErrorCode> {
     let body =
-        br#"{"subject":"slow-user","issuer":"middleware-secret-issuer-sentinel","scopes":["read"]}"#
+        br#"{"version":1,"subject":"slow-user","issuer":"middleware-secret-issuer-sentinel","scopes":["read"],"decision_id":"decision-slow","policy_revision":"mock-r1"}"#
             .to_vec();
     let fields = vec![
         ("content-type".to_owned(), b"application/json".to_vec()),
