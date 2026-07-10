@@ -1,5 +1,6 @@
 /target/
 /artifacts/
 /reports/
+.spin/
+__pycache__/
 *.tmp
-
