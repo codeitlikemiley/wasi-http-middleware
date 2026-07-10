@@ -1,10 +1,17 @@
 [package]
 name = "wasi-http-middleware-component-support"
-version = "0.1.0-alpha.1"
-edition = "2024"
-rust-version = "1.93"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Internal streaming-safe helpers for WASIp3 HTTP middleware components"
 publish = false
 
 [dependencies]
-http = "1.4.1"
-wasip3 = { version = "=0.6.0", features = ["async-spawn"] }
+http.workspace = true
+wasip3 = { workspace = true, features = ["async-spawn"] }
+
+[lints]
+workspace = true

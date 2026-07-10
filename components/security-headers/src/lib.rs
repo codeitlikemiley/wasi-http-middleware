@@ -1,4 +1,4 @@
-//! Conservative response security headers for WASIp3 HTTP services.
+//! Conservative response security headers for `WASIp3` HTTP services.
 
 #![deny(missing_docs)]
 
@@ -26,6 +26,6 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
         let mut headers =
             to_header_map(&headers).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
         apply_security_headers(&mut headers);
-        replace_response_headers(response, from_header_map(&headers))
+        replace_response_headers(response, &from_header_map(&headers))
     }
 }

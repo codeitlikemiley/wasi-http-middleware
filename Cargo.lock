@@ -354,6 +354,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "http",
  "serde_json",
+ "thiserror",
  "wasi-http-metadata",
  "wasi-http-middleware-component-support",
  "wasi-http-policy-core",
@@ -374,6 +375,7 @@ name = "wasi-http-middleware-cors"
 version = "0.1.0-alpha.1"
 dependencies = [
  "http",
+ "thiserror",
  "wasi-http-middleware-component-support",
  "wasi-http-policy-core",
  "wasip3",

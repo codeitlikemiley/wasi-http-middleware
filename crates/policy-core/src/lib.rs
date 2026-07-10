@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use http::{
-    HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
+    HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri,
     header::{
         ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS,
         ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_REQUEST_HEADERS,
@@ -22,6 +22,8 @@ use wasi_http_metadata::{Principal, REQUEST_ID_HEADER};
 pub const MAX_REQUEST_ID_LEN: usize = 128;
 /// Maximum accepted authorization header size.
 pub const MAX_AUTHORIZATION_LEN: usize = 8 * 1024;
+/// Maximum normalized path size sent to the policy service.
+pub const MAX_POLICY_PATH_LEN: usize = 8 * 1024;
 
 /// Errors produced by middleware policy validation.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
@@ -45,6 +47,9 @@ pub enum PolicyError {
     /// A policy-provider success response was malformed.
     #[error("invalid policy provider response")]
     InvalidPolicyResponse,
+    /// A request path was ambiguous or could not be normalized safely.
+    #[error("invalid request path")]
+    InvalidPath,
 }
 
 /// Canonicalizes request IDs without performing host-specific generation.
@@ -142,10 +147,7 @@ impl CorsConfig {
                 "wildcard CORS origin cannot allow credentials",
             ));
         }
-        if origins.iter().any(|origin| {
-            origin != "*"
-                && (!origin.is_ascii() || origin.bytes().any(|byte| byte.is_ascii_control()))
-        }) {
+        if origins.iter().any(|origin| !is_valid_cors_origin(origin)) {
             return Err(PolicyError::InvalidConfiguration("invalid CORS origin"));
         }
 
@@ -228,7 +230,7 @@ impl CorsConfig {
             return Ok(CorsDecision::pass_through());
         };
         if !self.origins.contains("*") && !self.origins.contains(origin) {
-            return Ok(CorsDecision::rejected(StatusCode::FORBIDDEN));
+            return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
         }
 
         let mut response_headers = HeaderMap::new();
@@ -264,7 +266,7 @@ impl CorsConfig {
                 Method::from_bytes(value.as_bytes()).map_err(|_| PolicyError::InvalidHeader)
             })?;
         if !self.methods.contains(&requested_method) {
-            return Ok(CorsDecision::rejected(StatusCode::FORBIDDEN));
+            return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
         }
 
         let requested_headers = single_text_header(headers, ACCESS_CONTROL_REQUEST_HEADERS)?
@@ -279,7 +281,7 @@ impl CorsConfig {
             .iter()
             .any(|header| !self.headers.contains(header.as_str()))
         {
-            return Ok(CorsDecision::rejected(StatusCode::FORBIDDEN));
+            return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
         }
 
         response_headers.insert(
@@ -331,9 +333,11 @@ impl CorsDecision {
         }
     }
 
-    fn rejected(status: StatusCode) -> Self {
+    fn rejected_for_origin(status: StatusCode) -> Self {
+        let mut response_headers = HeaderMap::new();
+        response_headers.insert(VARY, HeaderValue::from_static("Origin"));
         Self {
-            response_headers: HeaderMap::new(),
+            response_headers,
             status: Some(status),
         }
     }
@@ -362,6 +366,82 @@ pub struct PolicyRequest {
     pub path: String,
     /// Canonical request ID.
     pub request_id: String,
+}
+
+/// Produces the canonical path sent to the policy service.
+///
+/// The query is removed, percent escapes are decoded exactly once, encoded
+/// separators and double-encoding are rejected, and ambiguous dot or empty
+/// segments are rejected. A literal dot inside a larger segment remains valid.
+///
+/// # Errors
+///
+/// Returns [`PolicyError::InvalidPath`] when the path is malformed, ambiguous,
+/// not valid UTF-8 after decoding, or exceeds [`MAX_POLICY_PATH_LEN`].
+pub fn normalize_policy_path(path_with_query: &str) -> Result<String, PolicyError> {
+    let raw_path = path_with_query
+        .split_once('?')
+        .map_or(path_with_query, |(path, _)| path);
+    if raw_path.is_empty() {
+        return Ok("/".to_owned());
+    }
+    if !raw_path.starts_with('/') || raw_path.len() > MAX_POLICY_PATH_LEN {
+        return Err(PolicyError::InvalidPath);
+    }
+
+    let input = raw_path.as_bytes();
+    let mut decoded = Vec::with_capacity(input.len());
+    let mut index = 0;
+    while index < input.len() {
+        let byte = input[index];
+        if byte == b'%' {
+            let Some(high) = input.get(index + 1).and_then(|byte| hex_value(*byte)) else {
+                return Err(PolicyError::InvalidPath);
+            };
+            let Some(low) = input.get(index + 2).and_then(|byte| hex_value(*byte)) else {
+                return Err(PolicyError::InvalidPath);
+            };
+            let decoded_byte = (high << 4) | low;
+            if decoded_byte == b'%'
+                || decoded_byte == b'/'
+                || decoded_byte == b'\\'
+                || decoded_byte == b'?'
+                || decoded_byte == b'#'
+                || decoded_byte.is_ascii_control()
+            {
+                return Err(PolicyError::InvalidPath);
+            }
+            decoded.push(decoded_byte);
+            index += 3;
+            continue;
+        }
+        if byte == b'\\' || byte == b'#' || byte.is_ascii_control() {
+            return Err(PolicyError::InvalidPath);
+        }
+        decoded.push(byte);
+        index += 1;
+    }
+
+    let decoded = String::from_utf8(decoded).map_err(|_| PolicyError::InvalidPath)?;
+    if decoded.len() > MAX_POLICY_PATH_LEN
+        || decoded.contains("//")
+        || decoded
+            .split('/')
+            .skip(1)
+            .any(|segment| matches!(segment, "." | ".."))
+    {
+        return Err(PolicyError::InvalidPath);
+    }
+    Ok(decoded)
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// Successful policy-service response body.
@@ -445,6 +525,25 @@ fn split_csv(value: &str) -> Vec<&str> {
         .collect()
 }
 
+fn is_valid_cors_origin(origin: &str) -> bool {
+    if matches!(origin, "*" | "null") {
+        return true;
+    }
+    if !origin.is_ascii() || origin.bytes().any(|byte| byte.is_ascii_control()) {
+        return false;
+    }
+    let Ok(uri) = origin.parse::<Uri>() else {
+        return false;
+    };
+    let Some(scheme @ ("http" | "https")) = uri.scheme_str() else {
+        return false;
+    };
+    let Some(authority) = uri.authority() else {
+        return false;
+    };
+    !authority.as_str().contains('@') && origin == format!("{scheme}://{authority}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,6 +591,22 @@ mod tests {
     }
 
     #[test]
+    fn cors_rejects_non_origin_urls() {
+        for origin in [
+            "https://example.com/path",
+            "https://user@example.com",
+            "file://example.com",
+            "example.com",
+            "https://example.com?query=yes",
+        ] {
+            assert!(
+                CorsConfig::new([origin], ["GET"], ["content-type"], false).is_err(),
+                "{origin}"
+            );
+        }
+    }
+
+    #[test]
     fn cors_preflight_short_circuits_with_explicit_headers() {
         let config = CorsConfig::new(
             ["https://example.com"],
@@ -520,6 +635,91 @@ mod tests {
             decision.response_headers()[ACCESS_CONTROL_ALLOW_ORIGIN],
             "https://example.com"
         );
+    }
+
+    #[test]
+    fn cors_rejection_varies_by_origin() {
+        let config = CorsConfig::new(
+            ["https://allowed.example"],
+            ["GET"],
+            ["content-type"],
+            false,
+        )
+        .expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://denied.example"));
+
+        let decision = config
+            .evaluate(&Method::GET, &headers)
+            .expect("valid request");
+
+        assert_eq!(decision.status(), Some(StatusCode::FORBIDDEN));
+        assert_eq!(decision.response_headers()[VARY], "Origin");
+    }
+
+    #[test]
+    fn request_id_boundaries_and_ascii_contract_are_exhaustive() {
+        assert!(!is_valid_request_id(""));
+        assert!(is_valid_request_id(&"a".repeat(MAX_REQUEST_ID_LEN)));
+        assert!(!is_valid_request_id(&"a".repeat(MAX_REQUEST_ID_LEN + 1)));
+
+        for byte in u8::MIN..=u8::MAX {
+            let value = String::from_utf8(vec![byte]);
+            let expected =
+                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':' | b'/');
+            assert_eq!(value.as_deref().is_ok_and(is_valid_request_id), expected);
+        }
+    }
+
+    #[test]
+    fn authorization_size_boundary_is_exact() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::header::AUTHORIZATION,
+            HeaderValue::from_str(&"a".repeat(MAX_AUTHORIZATION_LEN)).expect("valid header"),
+        );
+        assert!(authorization_value(&headers).is_ok());
+
+        headers.insert(
+            http::header::AUTHORIZATION,
+            HeaderValue::from_str(&"a".repeat(MAX_AUTHORIZATION_LEN + 1)).expect("valid header"),
+        );
+        assert_eq!(
+            authorization_value(&headers),
+            Err(PolicyError::InvalidAuthorization)
+        );
+    }
+
+    #[test]
+    fn policy_path_is_decoded_once_and_query_free() {
+        assert_eq!(
+            normalize_policy_path("/%61dmin/report?token=secret"),
+            Ok("/admin/report".to_owned())
+        );
+        assert_eq!(
+            normalize_policy_path("/assets/app..min.js"),
+            Ok("/assets/app..min.js".to_owned())
+        );
+    }
+
+    #[test]
+    fn policy_path_rejects_ambiguous_forms() {
+        for path in [
+            "/admin/../public",
+            "/%2e%2e/public",
+            "/%2Fetc/passwd",
+            "/%5cwindows",
+            "/%252e%252e/public",
+            "/two//segments",
+            "/bad%",
+            "/bad%0g",
+        ] {
+            assert_eq!(
+                normalize_policy_path(path),
+                Err(PolicyError::InvalidPath),
+                "{path}"
+            );
+        }
     }
 
     #[test]

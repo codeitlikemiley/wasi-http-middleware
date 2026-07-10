@@ -1,10 +1,11 @@
-//! Explicit, configuration-driven CORS middleware for WASIp3 HTTP services.
+//! Explicit, configuration-driven CORS middleware for `WASIp3` HTTP services.
 
 #![deny(missing_docs)]
 
 use std::{borrow::Cow, sync::OnceLock};
 
 use http::{Method as HttpMethod, header::VARY};
+use thiserror::Error;
 use wasi_http_middleware_component_support::{
     Header, empty_response, from_header_map, header_values, merge_header_map,
     replace_response_headers, request_headers, response_headers, set_header, to_header_map,
@@ -30,8 +31,15 @@ const VARY_HEADER: &str = "vary";
 
 static CONFIG: OnceLock<Result<CorsConfig, ConfigError>> = OnceLock::new();
 
-#[derive(Clone, Copy, Debug)]
-struct ConfigError;
+#[derive(Clone, Copy, Debug, Error)]
+enum ConfigError {
+    #[error("missing CORS origin configuration")]
+    MissingOrigins,
+    #[error("duplicate middleware environment key")]
+    DuplicateEnvironment,
+    #[error("invalid CORS policy")]
+    InvalidPolicy,
+}
 
 struct Component;
 
@@ -44,17 +52,14 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             .as_ref()
             .map_err(|_| ErrorCode::ConfigurationError)?;
         let headers = request_headers(&request);
-        let header_map = match to_header_map(&headers) {
-            Ok(headers) => headers,
-            Err(_) => return empty_response(400, Vec::new()),
+        let Ok(header_map) = to_header_map(&headers) else {
+            return empty_response(400, Vec::new());
         };
-        let method = match to_http_method(&request.get_method()) {
-            Ok(method) => method,
-            Err(()) => return empty_response(400, Vec::new()),
+        let Ok(method) = to_http_method(&request.get_method()) else {
+            return empty_response(400, Vec::new());
         };
-        let decision = match config.evaluate(&method, &header_map) {
-            Ok(decision) => decision,
-            Err(_) => return empty_response(400, Vec::new()),
+        let Ok(decision) = config.evaluate(&method, &header_map) else {
+            return empty_response(400, Vec::new());
         };
 
         if let Some(status) = decision.status() {
@@ -71,16 +76,17 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
 
         let mut response_fields = response_headers(&response);
         merge_cors_headers(&mut response_fields, decision.response_headers());
-        replace_response_headers(response, response_fields)
+        replace_response_headers(response, &response_fields)
     }
 }
 
 fn load_config(environment: &[(String, String)]) -> Result<CorsConfig, ConfigError> {
-    let origins = environment_value(environment, ORIGINS)?.ok_or(ConfigError)?;
+    let origins = environment_value(environment, ORIGINS)?.ok_or(ConfigError::MissingOrigins)?;
     let methods = environment_value(environment, METHODS)?;
     let headers = environment_value(environment, HEADERS)?;
     let allow_credentials = environment_value(environment, ALLOW_CREDENTIALS)?;
-    CorsConfig::from_values(origins, methods, headers, allow_credentials).map_err(|_| ConfigError)
+    CorsConfig::from_values(origins, methods, headers, allow_credentials)
+        .map_err(|_| ConfigError::InvalidPolicy)
 }
 
 fn environment_value<'a>(
@@ -93,7 +99,7 @@ fn environment_value<'a>(
         .map(|(_, value)| value.as_str());
     let value = values.next();
     if values.next().is_some() {
-        return Err(ConfigError);
+        return Err(ConfigError::DuplicateEnvironment);
     }
     Ok(value)
 }
@@ -174,7 +180,10 @@ mod tests {
             ),
         ];
 
-        assert!(matches!(load_config(&environment), Err(ConfigError)));
+        assert!(matches!(
+            load_config(&environment),
+            Err(ConfigError::DuplicateEnvironment)
+        ));
     }
 
     #[test]

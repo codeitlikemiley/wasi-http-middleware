@@ -1,4 +1,4 @@
-//! A streaming-safe WASIp3 request ID middleware component.
+//! A streaming-safe `WASIp3` request ID middleware component.
 
 #![deny(missing_docs)]
 
@@ -29,12 +29,12 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
         let mut headers = request_headers(&request);
         let request_id = canonical_request_id(&headers)?;
         set_header(&mut headers, REQUEST_ID_HEADER, request_id.as_bytes());
-        let request = replace_request_headers(request, headers)?;
+        let request = replace_request_headers(request, &headers)?;
 
         let response = handler::handle(request).await?;
         let mut headers = response_headers(&response);
         set_header(&mut headers, REQUEST_ID_HEADER, request_id.as_bytes());
-        replace_response_headers(response, headers)
+        replace_response_headers(response, &headers)
     }
 }
 

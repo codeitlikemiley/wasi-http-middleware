@@ -5,16 +5,19 @@
 use std::{borrow::Cow, sync::OnceLock};
 
 use http::{HeaderMap, HeaderValue, StatusCode, Uri};
+use thiserror::Error;
 use wasi_http_metadata::{REQUEST_ID_HEADER, insert_principal, strip_reserved_auth_headers};
 use wasi_http_middleware_component_support::{
     Header, empty_response, from_header_map, replace_request_headers, request_headers,
     to_header_map,
 };
 use wasi_http_policy_core::{
-    AuthDecision, PolicyRequest, RequestIdPolicy, authorization_value, parse_policy_response,
+    AuthDecision, PolicyRequest, RequestIdPolicy, authorization_value, normalize_policy_path,
+    parse_policy_response,
 };
 use wasip3::{
     cli::environment::get_environment,
+    clocks::monotonic_clock,
     http::{
         client,
         types::{ErrorCode, Headers, Method, Request, RequestOptions, Response, Scheme},
@@ -47,8 +50,33 @@ struct AuthConfig {
     timeout_ns: u64,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct ConfigError;
+#[derive(Clone, Copy, Debug, Error)]
+enum ConfigError {
+    #[error("missing policy URL")]
+    MissingPolicyUrl,
+    #[error("invalid policy URL")]
+    InvalidPolicyUrl,
+    #[error("invalid policy timeout")]
+    InvalidTimeout,
+    #[error("duplicate middleware environment key")]
+    DuplicateEnvironment,
+}
+
+#[derive(Clone, Copy, Debug, Error)]
+enum PolicyCallError {
+    #[error("policy request serialization failed")]
+    Serialization,
+    #[error("policy request construction failed")]
+    RequestConstruction,
+    #[error("policy transport failed")]
+    Transport,
+    #[error("policy response status was invalid")]
+    InvalidStatus,
+    #[error("policy response body failed")]
+    ResponseBody,
+    #[error("policy deadline elapsed")]
+    Deadline,
+}
 
 struct Component;
 
@@ -61,9 +89,8 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             .as_ref()
             .map_err(|_| ErrorCode::ConfigurationError)?;
         let fields = request_headers(&request);
-        let mut headers = match to_header_map(&fields) {
-            Ok(headers) => headers,
-            Err(_) => return empty_response(400, Vec::new()),
+        let Ok(mut headers) = to_header_map(&fields) else {
+            return empty_response(400, Vec::new());
         };
         let request_id = match canonical_request_id(&headers) {
             Ok(request_id) => request_id,
@@ -80,10 +107,12 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             HeaderValue::from_str(&request_id).map_err(|_| ErrorCode::InternalError(None))?,
         );
 
-        let policy_request = policy_request_for(&request, &request_id);
+        let Ok(policy_request) = policy_request_for(&request, &request_id) else {
+            return rejection_response(400, &request_id);
+        };
         let decision = match call_policy(config, &policy_request, authorization.as_deref()).await {
             Ok(decision) => decision,
-            Err(()) => AuthDecision::Unavailable,
+            Err(_error) => AuthDecision::Unavailable,
         };
 
         match decision {
@@ -91,7 +120,7 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
                 insert_principal(&mut headers, &principal)
                     .map_err(|_| ErrorCode::InternalError(None))?;
                 let canonical_fields = from_header_map(&headers);
-                let request = replace_request_headers(request, canonical_fields)?;
+                let request = replace_request_headers(request, &canonical_fields)?;
                 handler::handle(request).await
             }
             AuthDecision::Unauthenticated => rejection_response(401, &request_id),
@@ -102,17 +131,24 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
 }
 
 fn load_config(environment: &[(String, String)]) -> Result<AuthConfig, ConfigError> {
-    let policy_url = environment_value(environment, POLICY_URL)?.ok_or(ConfigError)?;
+    let policy_url =
+        environment_value(environment, POLICY_URL)?.ok_or(ConfigError::MissingPolicyUrl)?;
     if policy_url.len() > 2_048 {
-        return Err(ConfigError);
+        return Err(ConfigError::InvalidPolicyUrl);
     }
-    let uri = policy_url.parse::<Uri>().map_err(|_| ConfigError)?;
+    let uri = policy_url
+        .parse::<Uri>()
+        .map_err(|_| ConfigError::InvalidPolicyUrl)?;
     let scheme = match uri.scheme_str() {
         Some("http") => Scheme::Http,
         Some("https") => Scheme::Https,
-        _ => return Err(ConfigError),
+        _ => return Err(ConfigError::InvalidPolicyUrl),
     };
-    let authority = uri.authority().ok_or(ConfigError)?.as_str().to_owned();
+    let authority = uri
+        .authority()
+        .ok_or(ConfigError::InvalidPolicyUrl)?
+        .as_str()
+        .to_owned();
     let path_with_query = uri
         .path_and_query()
         .map_or("/", http::uri::PathAndQuery::as_str)
@@ -120,10 +156,10 @@ fn load_config(environment: &[(String, String)]) -> Result<AuthConfig, ConfigErr
     let timeout_ms = environment_value(environment, POLICY_TIMEOUT_MS)?
         .map(str::parse::<u64>)
         .transpose()
-        .map_err(|_| ConfigError)?
+        .map_err(|_| ConfigError::InvalidTimeout)?
         .unwrap_or(DEFAULT_TIMEOUT_MS);
     if timeout_ms == 0 || timeout_ms > MAX_TIMEOUT_MS {
-        return Err(ConfigError);
+        return Err(ConfigError::InvalidTimeout);
     }
 
     Ok(AuthConfig {
@@ -144,7 +180,7 @@ fn environment_value<'a>(
         .map(|(_, value)| value.as_str());
     let value = values.next();
     if values.next().is_some() {
-        return Err(ConfigError);
+        return Err(ConfigError::DuplicateEnvironment);
     }
     Ok(value)
 }
@@ -159,7 +195,7 @@ fn canonical_request_id(headers: &HeaderMap) -> Result<String, ErrorCode> {
         .map_err(|_| ErrorCode::InternalError(None))
 }
 
-fn policy_request_for(request: &Request, request_id: &str) -> PolicyRequest {
+fn policy_request_for(request: &Request, request_id: &str) -> Result<PolicyRequest, ()> {
     let method_value = request.get_method();
     let method = method_text(&method_value).into_owned();
     let scheme = request
@@ -169,29 +205,36 @@ fn policy_request_for(request: &Request, request_id: &str) -> PolicyRequest {
     let path_with_query = request
         .get_path_with_query()
         .unwrap_or_else(|| "/".to_owned());
-    let path = path_with_query.split('?').next().unwrap_or("/").to_owned();
+    let path = normalize_policy_path(&path_with_query).map_err(|_| ())?;
 
-    PolicyRequest {
+    Ok(PolicyRequest {
         method,
         scheme,
         authority,
         path,
         request_id: request_id.to_owned(),
-    }
+    })
 }
 
 async fn call_policy(
     config: &AuthConfig,
     policy_request: &PolicyRequest,
     authorization: Option<&str>,
-) -> Result<AuthDecision, ()> {
-    let body = serde_json::to_vec(policy_request).map_err(|_| ())?;
+) -> Result<AuthDecision, PolicyCallError> {
+    let started = monotonic_clock::now();
+    let body = serde_json::to_vec(policy_request).map_err(|_| PolicyCallError::Serialization)?;
     let request =
         build_policy_http_request(config, body, authorization, &policy_request.request_id)
-            .map_err(|_| ())?;
-    let response = client::send(request).await.map_err(|_| ())?;
-    let status = StatusCode::from_u16(response.get_status_code()).map_err(|_| ())?;
-    let body = collect_policy_response(response).await?;
+            .map_err(|_| PolicyCallError::RequestConstruction)?;
+    let response = client::send(request)
+        .await
+        .map_err(|_| PolicyCallError::Transport)?;
+    if deadline_expired(started, config.timeout_ns) {
+        return Err(PolicyCallError::Deadline);
+    }
+    let status = StatusCode::from_u16(response.get_status_code())
+        .map_err(|_| PolicyCallError::InvalidStatus)?;
+    let body = collect_policy_response(response, started, config.timeout_ns).await?;
     Ok(parse_policy_response(status, &body))
 }
 
@@ -246,7 +289,11 @@ fn build_policy_http_request(
     Ok(request)
 }
 
-async fn collect_policy_response(response: Response) -> Result<Vec<u8>, ()> {
+async fn collect_policy_response(
+    response: Response,
+    started: u64,
+    timeout_ns: u64,
+) -> Result<Vec<u8>, PolicyCallError> {
     let (result_writer, body_result) = wit_future::new(|| Ok(()));
     drop(result_writer);
     let (mut body, trailers) = Response::consume_body(response, body_result);
@@ -255,18 +302,25 @@ async fn collect_policy_response(response: Response) -> Result<Vec<u8>, ()> {
     loop {
         let (status, chunk) = body.read(Vec::with_capacity(8 * 1024)).await;
         if output.len().saturating_add(chunk.len()) > MAX_POLICY_RESPONSE_SIZE {
-            return Err(());
+            return Err(PolicyCallError::ResponseBody);
         }
         output.extend_from_slice(&chunk);
+        if deadline_expired(started, timeout_ns) {
+            return Err(PolicyCallError::Deadline);
+        }
         match status {
             StreamResult::Complete(_) => {}
             StreamResult::Dropped => {
-                let _trailers = trailers.await.map_err(|_| ())?;
+                let _trailers = trailers.await.map_err(|_| PolicyCallError::ResponseBody)?;
                 return Ok(output);
             }
-            StreamResult::Cancelled => return Err(()),
+            StreamResult::Cancelled => return Err(PolicyCallError::ResponseBody),
         }
     }
+}
+
+fn deadline_expired(started: u64, timeout_ns: u64) -> bool {
+    monotonic_clock::now().saturating_sub(started) >= timeout_ns
 }
 
 fn rejection_response(status: u16, request_id: &str) -> Result<Response, ErrorCode> {
@@ -324,7 +378,10 @@ mod tests {
             "file:///policy".to_owned(),
         )];
 
-        assert!(matches!(load_config(&environment), Err(ConfigError)));
+        assert!(matches!(
+            load_config(&environment),
+            Err(ConfigError::InvalidPolicyUrl)
+        ));
     }
 
     #[test]
@@ -340,6 +397,9 @@ mod tests {
             ),
         ];
 
-        assert!(matches!(load_config(&environment), Err(ConfigError)));
+        assert!(matches!(
+            load_config(&environment),
+            Err(ConfigError::InvalidTimeout)
+        ));
     }
 }

@@ -1,4 +1,4 @@
-//! Resource-preserving helpers shared by the WASIp3 middleware components.
+//! Resource-preserving helpers shared by the `WASIp3` middleware components.
 
 #![deny(missing_docs)]
 
@@ -8,7 +8,7 @@ use http::{HeaderMap, HeaderName, HeaderValue};
 use wasip3::http::types::{ErrorCode, Headers, Method, Request, Response, Scheme};
 use wasip3::wit_future;
 
-/// Generates the pinned WASIp3 middleware world while reusing `wasip3`'s
+/// Generates the pinned `WASIp3` middleware world while reusing `wasip3`'s
 /// resource types for every shared interface.
 ///
 /// Invoke this macro inside a private `bindings` module in each component.
@@ -124,15 +124,17 @@ pub fn merge_header_map(target: &mut Vec<Header>, source: &HeaderMap) {
 ///
 /// The body stream is transferred directly into the new request and is never
 /// read, buffered, or copied.
-pub fn replace_request_headers(
-    request: Request,
-    headers: Vec<Header>,
-) -> Result<Request, ErrorCode> {
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when the requested header changes or request
+/// metadata cannot be applied to the forwarded request.
+pub fn replace_request_headers(request: Request, headers: &[Header]) -> Result<Request, ErrorCode> {
     let original_headers = request.get_headers();
     let original_fields = original_headers.copy_all();
     let forwarded_headers = original_headers.clone();
     drop(original_headers);
-    apply_header_diff(&forwarded_headers, &original_fields, &headers)
+    apply_header_diff(&forwarded_headers, &original_fields, headers)
         .map_err(|()| request_header_error())?;
 
     let method = request.get_method();
@@ -160,15 +162,20 @@ pub fn replace_request_headers(
 ///
 /// The body stream is transferred directly into the new response and is never
 /// read, buffered, or copied.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when the requested header changes or original
+/// status code cannot be applied to the forwarded response.
 pub fn replace_response_headers(
     response: Response,
-    headers: Vec<Header>,
+    headers: &[Header],
 ) -> Result<Response, ErrorCode> {
     let original_headers = response.get_headers();
     let original_fields = original_headers.copy_all();
     let forwarded_headers = original_headers.clone();
     drop(original_headers);
-    apply_header_diff(&forwarded_headers, &original_fields, &headers)
+    apply_header_diff(&forwarded_headers, &original_fields, headers)
         .map_err(|()| response_header_error())?;
 
     let status = response.get_status_code();
@@ -182,6 +189,11 @@ pub fn replace_response_headers(
 }
 
 /// Constructs a response with no body and no trailers.
+///
+/// # Errors
+///
+/// Returns a WASI HTTP error when the supplied headers or status code cannot
+/// be used to construct the response.
 pub fn empty_response(status: u16, mut headers: Vec<Header>) -> Result<Response, ErrorCode> {
     if !headers
         .iter()
