@@ -349,6 +349,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasi-http-middleware-auth-policy"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "http",
+ "serde_json",
+ "wasi-http-metadata",
+ "wasi-http-middleware-component-support",
+ "wasi-http-policy-core",
+ "wasip3",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "wasi-http-middleware-component-support"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -369,6 +382,14 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-echo-service"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "wasip3",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "wasi-http-middleware-mock-policy"
 version = "0.1.0-alpha.1"
 dependencies = [
  "wasip3",

@@ -1,0 +1,14 @@
+[package]
+name = "wasi-http-middleware-mock-policy"
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.93"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasip3 = { version = "=0.6.0", features = ["async-spawn"] }
+wit-bindgen = { version = "=0.57.1", features = ["async-spawn"] }
+

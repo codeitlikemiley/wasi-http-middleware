@@ -1,0 +1,18 @@
+[package]
+name = "wasi-http-middleware-auth-policy"
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.93"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+http = "1.4.1"
+serde_json = "1.0"
+wasi-http-metadata = { path = "../../crates/metadata" }
+wasi-http-middleware-component-support = { path = "../../crates/component-support" }
+wasi-http-policy-core = { path = "../../crates/policy-core" }
+wasip3 = { version = "=0.6.0", features = ["async-spawn"] }
+wit-bindgen = { version = "=0.57.1", features = ["async-spawn"] }

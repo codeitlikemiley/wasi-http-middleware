@@ -2,10 +2,12 @@
 members = [
     "crates/*",
     "components/passthrough",
+    "components/auth-policy",
     "components/request-id",
     "components/security-headers",
     "components/cors",
     "test-components/echo-service",
+    "test-components/mock-policy",
 ]
 resolver = "2"
 
