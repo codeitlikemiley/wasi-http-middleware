@@ -117,6 +117,7 @@ fn delayed_response() -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     wasip3::spawn(async move {
         let remaining = writer.write_all(b"first\n".to_vec()).await;
         if !remaining.is_empty() {
@@ -124,11 +125,11 @@ fn delayed_response() -> Result<Response, ErrorCode> {
         }
         wait_for(300_000_000).await;
         let remaining = writer.write_all(b"second\n".to_vec()).await;
-        drop(remaining);
+        if remaining.is_empty() {
+            let _write_result = body_result_writer.write(Ok(None)).await;
+        }
     });
-    let (trailers_writer, trailers) = wit_future::new(|| Ok(None));
-    drop(trailers_writer);
-    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    let (response, _transmission_result) = Response::new(headers, Some(reader), body_result);
     Ok(response)
 }
 
@@ -137,14 +138,16 @@ fn failing_stream_response() -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     wasip3::spawn(async move {
         let remaining = writer.write_all(b"partial body\n".to_vec()).await;
-        drop(remaining);
+        if remaining.is_empty() {
+            let _write_result = body_result_writer
+                .write(Err(ErrorCode::InternalError(None)))
+                .await;
+        }
     });
-    let (trailers_writer, trailers) =
-        wit_future::new(|| Err::<Option<Headers>, ErrorCode>(ErrorCode::InternalError(None)));
-    drop(trailers_writer);
-    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    let (response, _transmission_result) = Response::new(headers, Some(reader), body_result);
     Ok(response)
 }
 
@@ -153,13 +156,14 @@ fn trailers_response() -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     wasip3::spawn(async move {
         let remaining = writer.write_all(b"body with trailer\n".to_vec()).await;
-        drop(remaining);
+        if remaining.is_empty() {
+            let _write_result = body_result_writer.write(echo_trailers()).await;
+        }
     });
-    let (trailers_writer, trailers) = wit_future::new(echo_trailers);
-    drop(trailers_writer);
-    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    let (response, _transmission_result) = Response::new(headers, Some(reader), body_result);
     Ok(response)
 }
 
@@ -202,17 +206,23 @@ fn response(
     }
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
-    let body = body.map(|body| {
+    let (body, body_result) = if let Some(body) = body {
         let (mut writer, reader) = wit_stream::new();
+        let (body_result_writer, body_result) =
+            wit_future::new(|| Err(ErrorCode::InternalError(None)));
         wasip3::spawn(async move {
             let remaining = writer.write_all(body).await;
-            drop(remaining);
+            if remaining.is_empty() {
+                let _write_result = body_result_writer.write(Ok(None)).await;
+            }
         });
-        reader
-    });
-    let (trailers_writer, trailers) = wit_future::new(|| Ok(None));
-    drop(trailers_writer);
-    let (response, _transmission_result) = Response::new(headers, body, trailers);
+        (Some(reader), body_result)
+    } else {
+        let (body_result_writer, body_result) = wit_future::new(|| Ok(None));
+        drop(body_result_writer);
+        (None, body_result)
+    };
+    let (response, _transmission_result) = Response::new(headers, body, body_result);
     response
         .set_status_code(status)
         .map_err(|()| ErrorCode::InternalError(None))?;

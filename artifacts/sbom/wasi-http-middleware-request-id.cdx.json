@@ -1674,7 +1674,8 @@
     {
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2",
-        "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0"
+        "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
+        "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
       "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.1.0-alpha.1"
     },

@@ -114,7 +114,9 @@ if [[ "${ready}" != "true" ]]; then
     exit 1
 fi
 
-if ! bash "${REPO_ROOT}/scripts/exercise-http-contract.sh" "http://${app_address}"; then
+stream_failure_repeats="${STREAM_FAILURE_REPEATS:-25}"
+if ! STREAM_FAILURE_REPEATS="${stream_failure_repeats}" \
+    bash "${REPO_ROOT}/scripts/exercise-http-contract.sh" "http://${app_address}"; then
     cat "${temporary_directory}/policy.log" >&2
     cat "${temporary_directory}/app.log" >&2
     exit 1
@@ -123,7 +125,7 @@ assert_logs_do_not_contain_secrets \
     "${temporary_directory}/policy.log" \
     "${temporary_directory}/app.log"
 assert_log_occurrences \
-    116 \
+    "$((115 + stream_failure_repeats))" \
     "wasi-http-middleware-test: terminal-invocation" \
     "${temporary_directory}/app.log"
 

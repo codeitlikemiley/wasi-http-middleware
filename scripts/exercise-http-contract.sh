@@ -228,29 +228,37 @@ if [[ "$(cat "${body_file}")" != "body with trailer" ]]; then
     exit 1
 fi
 
-set +e
-: >"${body_file}"
-: >"${header_file}"
-failing_status="$(curl --silent --show-error --max-time 5 \
-    --output "${body_file}" \
-    --dump-header "${header_file}" \
-    --write-out '%{http_code}' \
-    --header 'x-wasi-test-count: 1' \
-    --header 'Authorization: Bearer allow' \
-    "${base_url}/failing-stream")"
-failing_exit=$?
-set -e
-if [[ "${failing_exit}" == "0" ]] \
-    || [[ "${failing_status}" != "200" && "${failing_status}" != "000" ]]; then
-    echo "error: failing response stream was not surfaced as a connection failure" >&2
-    cat "${header_file}" >&2
-    cat "${body_file}" >&2
-    exit 1
-fi
-if [[ "${failing_status}" == "200" ]]; then
-    require_header "x-request-id" '[A-Za-z0-9._:/-]{1,128}'
-    require_header "x-content-type-options" 'nosniff'
-fi
+for attempt in $(seq 1 "${STREAM_FAILURE_REPEATS:-25}"); do
+    set +e
+    : >"${body_file}"
+    : >"${header_file}"
+    failing_status="$(curl --silent --show-error --max-time 5 \
+        --output "${body_file}" \
+        --dump-header "${header_file}" \
+        --write-out '%{http_code}' \
+        --header 'x-wasi-test-count: 1' \
+        --header 'Authorization: Bearer allow' \
+        "${base_url}/failing-stream")"
+    failing_exit=$?
+    set -e
+    if [[ "${failing_exit}" == "0" ]] \
+        || [[ "${failing_status}" != "200" && "${failing_status}" != "000" ]]; then
+        echo "error: failing response stream was not surfaced on attempt ${attempt}" >&2
+        cat "${header_file}" >&2
+        cat "${body_file}" >&2
+        exit 1
+    fi
+    if [[ "${failing_status}" == "200" ]]; then
+        if [[ "$(cat "${body_file}")" != "partial body" ]]; then
+            echo "error: first response frame was lost before stream failure on attempt ${attempt}" >&2
+            cat "${header_file}" >&2
+            cat "${body_file}" >&2
+            exit 1
+        fi
+        require_header "x-request-id" '[A-Za-z0-9._:/-]{1,128}'
+        require_header "x-content-type-options" 'nosniff'
+    fi
+done
 
 disconnect_payload="${temporary_directory}/disconnect-payload"
 python3 - "${disconnect_payload}" <<'PY'

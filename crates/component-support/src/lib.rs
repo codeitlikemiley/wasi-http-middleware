@@ -148,11 +148,15 @@ pub fn replace_request_headers(request: Request, headers: &[Header]) -> Result<R
     let path_with_query = request.get_path_with_query();
     let authority = request.get_authority();
     let options = request.get_options();
-    let (_, body_result) = wit_future::new(|| Ok(()));
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     let (body, trailers) = Request::consume_body(request, body_result);
 
-    let (forwarded, _transmission_result) =
+    let (forwarded, transmission_result) =
         Request::new(forwarded_headers, Some(body), trailers, options);
+    wit_bindgen::spawn_local(async move {
+        let result = transmission_result.await;
+        let _write_result = body_result_writer.write(result).await;
+    });
     restore_request_metadata(
         &forwarded,
         &method,
@@ -185,9 +189,13 @@ pub fn replace_response_headers(
         .map_err(|()| response_header_error())?;
 
     let status = response.get_status_code();
-    let (_, body_result) = wit_future::new(|| Ok(()));
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     let (body, trailers) = Response::consume_body(response, body_result);
-    let (forwarded, _transmission_result) = Response::new(forwarded_headers, Some(body), trailers);
+    let (forwarded, transmission_result) = Response::new(forwarded_headers, Some(body), trailers);
+    wit_bindgen::spawn_local(async move {
+        let result = transmission_result.await;
+        let _write_result = body_result_writer.write(result).await;
+    });
     forwarded
         .set_status_code(status)
         .map_err(|()| ErrorCode::InternalError(None))?;
