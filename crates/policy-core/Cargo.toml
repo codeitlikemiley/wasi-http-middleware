@@ -7,6 +7,9 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 description = "Pure policy engine for reusable WASI HTTP middleware components"
+readme = "../../README.md"
+keywords = ["wasi", "wasm", "http", "authentication", "middleware"]
+categories = ["wasm", "web-programming::http-server", "authentication"]
 
 [dependencies]
 http.workspace = true
@@ -17,4 +20,3 @@ wasi-http-metadata.workspace = true
 
 [lints]
 workspace = true
-

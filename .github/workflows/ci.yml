@@ -48,6 +48,21 @@ jobs:
       - run: cargo clippy --workspace --locked --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --locked --all-features
 
+  release-structure:
+    name: Semver and package structure
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.93.0
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+      - run: cargo install cargo-semver-checks --locked --version 0.48.0
+      - run: bash scripts/check-semver-baseline.sh
+      - run: bash scripts/check-packages.sh
+
   dependencies:
     name: Dependency policy
     runs-on: ubuntu-24.04

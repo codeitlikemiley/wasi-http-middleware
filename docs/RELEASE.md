@@ -19,6 +19,8 @@ RUSTDOCFLAGS='-Dmissing-docs -Drustdoc::broken-intra-doc-links' \
   cargo doc --workspace --locked --no-deps --all-features
 cargo audit --deny warnings
 cargo deny check
+bash scripts/check-semver-baseline.sh
+bash scripts/check-packages.sh
 bash scripts/build-components.sh
 bash scripts/check-component-contracts.sh
 bash scripts/run-wasmtime-e2e.sh
@@ -69,6 +71,30 @@ After the final version commit, regenerate all checksums, SBOMs, WIT reports,
 and provenance because package versions and source revision are embedded.
 Push, tag, registry upload, crates.io publication, and GitHub release creation
 remain separate operator actions.
+
+## Registry order
+
+Implementation and release preparation do not publish crates. When an operator
+authorizes the separate crates.io action, publish and verify in this order:
+
+1. `wasi-http-metadata`;
+2. `wasi-http-middleware-component-support` (independent of metadata and safe
+   to publish before or after step 1);
+3. wait until the registry index resolves the exact metadata alpha, then
+   publish `wasi-http-policy-core`.
+
+`policy-core` deliberately pins `wasi-http-metadata =0.2.0-alpha.1`. Before
+step 1 reaches the registry, Cargo cannot perform the final package verification
+for `policy-core`; `scripts/check-packages.sh` accepts only that exact blocker,
+verifies the exact package file list and source manifest, and rejects every
+other failure. Components and `authn-runtime` remain `publish = false`;
+compiled WASM artifacts use the separate signed-bundle release process.
+
+The gate verifies Cargo-produced archives for metadata and component-support.
+For policy-core it verifies the exact Cargo package list and manifest metadata,
+then attempts archive creation and accepts only Cargo's missing exact-metadata
+registry error. The operator must rerun the same gate after step 1; at that
+point the policy-core archive must be produced and verified before publication.
 
 ## Stable promotion
 

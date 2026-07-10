@@ -25,3 +25,4 @@ version = "0.2.0-alpha.1"
 channel = "alpha"
 stable_spin_required = false
 publish = false
+semver_baseline = "6977a75c4d2cb1558158341c109e419189dc2c52"
