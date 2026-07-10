@@ -13,6 +13,7 @@ python3 "${REPO_ROOT}/scripts/test_audit_spin_manifest.py"
 python3 "${REPO_ROOT}/scripts/check-spin-fixtures.py"
 
 mkdir -p "${REPORT_ROOT}/wit"
+rm -f "${REPORT_ROOT}/wit/"*.wit
 
 fail_contract() {
     local component="$1"

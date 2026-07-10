@@ -16,6 +16,7 @@ if ! rustup target list --installed | grep -Fxq "${target}"; then
 fi
 
 mkdir -p "${COMPONENT_ARTIFACT_DIR}" "${TEST_COMPONENT_ARTIFACT_DIR}"
+rm -f "${COMPONENT_ARTIFACT_DIR}/"*.wasm "${TEST_COMPONENT_ARTIFACT_DIR}/"*.wasm
 
 build_and_copy() {
     local package="$1"

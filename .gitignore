@@ -1,6 +1,11 @@
 /target/
-/artifacts/
-/reports/
+/artifacts/*
+!/artifacts/SHA256SUMS
+!/artifacts/sbom/
+!/artifacts/sbom/*.cdx.json
+/reports/*
+!/reports/wit/
+!/reports/wit/*.wit
 .spin/
 __pycache__/
 *.tmp

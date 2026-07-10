@@ -49,6 +49,9 @@ list_packages | while IFS=$'\t' read -r package manifest; do
         exit 1
     fi
     mv "${generated}" "${ARTIFACT_ROOT}/sbom/${package}.cdx.json"
+    python3 "${REPO_ROOT}/scripts/normalize-sbom.py" \
+        "${REPO_ROOT}" \
+        "${ARTIFACT_ROOT}/sbom/${package}.cdx.json"
 done
 
 echo "wrote CycloneDX SBOMs in ${ARTIFACT_ROOT}/sbom"
