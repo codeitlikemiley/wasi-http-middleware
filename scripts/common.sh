@@ -61,7 +61,14 @@ require_version() {
     local expected="$2"
     local actual
     require_command "${command_name}"
-    actual="$("${command_name}" --version 2>&1)"
+    if actual="$("${command_name}" --version 2>&1)"; then
+        :
+    elif actual="$("${command_name}" version 2>&1)"; then
+        :
+    else
+        echo "error: could not query ${command_name} version" >&2
+        return 1
+    fi
     if [[ "${actual}" != *"${expected}"* ]]; then
         echo "error: ${command_name} version mismatch; expected ${expected}, found: ${actual}" >&2
         return 1
