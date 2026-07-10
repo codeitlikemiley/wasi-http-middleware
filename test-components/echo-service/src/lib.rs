@@ -2,6 +2,8 @@
 
 #![deny(missing_docs)]
 
+use http::HeaderValue;
+use wasi_http_metadata::{AUTH_CONTEXT_HEADER, AuthContextV1, AuthStateV1, decode_auth_context};
 use wasip3::{
     clocks::monotonic_clock::wait_for,
     http::types::{ErrorCode, Headers, Method, Request, Response},
@@ -31,10 +33,16 @@ impl wasip3::exports::http::handler::Guest for Component {
             (_, "/echo") => echo_body(request),
             (Method::Get, "/identity") => {
                 let headers = request.get_headers();
-                let subject = single_header(&headers, "x-wasi-auth-subject")
+                let subject = parse_context(&headers)
+                    .and_then(|context| {
+                        context
+                            .principal()
+                            .map(|principal| principal.subject().to_owned())
+                    })
                     .unwrap_or_else(|| "anonymous".to_owned());
                 response(200, vec![], Some(subject.into_bytes()))
             }
+            (Method::Get, "/auth-contract") => auth_contract(&request),
             (Method::Get, "/redirect") => {
                 response(302, vec![("location".to_owned(), b"/".to_vec())], None)
             }
@@ -54,6 +62,54 @@ impl wasip3::exports::http::handler::Guest for Component {
             _ => response(404, vec![], None),
         }
     }
+}
+
+fn auth_contract(request: &Request) -> Result<Response, ErrorCode> {
+    let headers = request.get_headers();
+    let fields = headers.copy_all();
+    let reserved_spoof = fields
+        .iter()
+        .any(|(name, _)| name.starts_with("x-wasi-auth-") && name != AUTH_CONTEXT_HEADER.as_str());
+    if headers.has("authorization") || reserved_spoof {
+        return response(
+            500,
+            vec![],
+            Some(b"credential-or-spoof-reached-terminal\n".to_vec()),
+        );
+    }
+    let values = headers.get(AUTH_CONTEXT_HEADER.as_str());
+    let [encoded] = values.as_slice() else {
+        return response(500, vec![], Some(b"invalid-auth-context\n".to_vec()));
+    };
+    let Some(context) = HeaderValue::from_bytes(encoded)
+        .ok()
+        .and_then(|value| decode_auth_context(&value).ok())
+    else {
+        return response(500, vec![], Some(b"invalid-auth-context\n".to_vec()));
+    };
+    let state = match context.state() {
+        AuthStateV1::Anonymous => b"anonymous\n".to_vec(),
+        AuthStateV1::Authenticated => b"authenticated\n".to_vec(),
+        _ => return response(500, vec![], Some(b"unknown-auth-state\n".to_vec())),
+    };
+    response(
+        200,
+        vec![
+            (AUTH_CONTEXT_HEADER.as_str().to_owned(), encoded.clone()),
+            ("x-wasi-auth-spoofed".to_owned(), b"terminal".to_vec()),
+        ],
+        Some(state),
+    )
+}
+
+fn parse_context(headers: &Headers) -> Option<AuthContextV1> {
+    let values = headers.get(AUTH_CONTEXT_HEADER.as_str());
+    let [value] = values.as_slice() else {
+        return None;
+    };
+    HeaderValue::from_bytes(value)
+        .ok()
+        .and_then(|value| decode_auth_context(&value).ok())
 }
 
 fn delayed_response() -> Result<Response, ErrorCode> {
@@ -161,12 +217,4 @@ fn response(
         .set_status_code(status)
         .map_err(|()| ErrorCode::InternalError(None))?;
     Ok(response)
-}
-
-fn single_header(headers: &Headers, name: &str) -> Option<String> {
-    let values = headers.get(name);
-    let [value] = values.as_slice() else {
-        return None;
-    };
-    std::str::from_utf8(value).ok().map(str::to_owned)
 }

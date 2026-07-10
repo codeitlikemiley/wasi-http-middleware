@@ -9,7 +9,7 @@ wasmtime_bin="$(resolve_pinned_tool WASMTIME_BIN wasmtime "${wasmtime_version}")
 require_command curl
 
 echo_component="${E2E_APP_COMPONENT:-$(test_component_file echo-service)}"
-policy_component="${E2E_POLICY_COMPONENT:-$(test_component_file mock-policy)}"
+policy_component="${E2E_AUTHN_BROKER_COMPONENT:-$(test_component_file mock-authn-broker)}"
 require_file "${echo_component}"
 require_file "${policy_component}"
 
@@ -17,7 +17,7 @@ app_port="${E2E_APP_PORT:-19090}"
 policy_port="${E2E_POLICY_PORT:-19091}"
 app_address="127.0.0.1:${app_port}"
 policy_address="127.0.0.1:${policy_port}"
-policy_url="http://${policy_address}/check"
+policy_url="http://${policy_address}/authenticate"
 if [[ -n "${E2E_COMPOSED_COMPONENT:-}" ]]; then
     composed="${E2E_COMPOSED_COMPONENT}"
     require_file "${composed}"
@@ -73,8 +73,13 @@ fi
     --env "WASI_MIDDLEWARE_CORS_METHODS=GET,HEAD,POST" \
     --env "WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization" \
     --env "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=false" \
-    --env "WASI_MIDDLEWARE_POLICY_URL=${policy_url}" \
-    --env "WASI_MIDDLEWARE_POLICY_TIMEOUT_MS=2000" \
+    --env "WASI_MIDDLEWARE_AUTHN_BROKER_URL=${policy_url}" \
+    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=2000" \
+    --env "WASI_MIDDLEWARE_AUTHN_MODE=required" \
+    --env "WASI_MIDDLEWARE_SERVICE_ID=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT=64" \
+    --env "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK=true" \
     --addr "${app_address}" \
     "${composed}" \
     >"${temporary_directory}/app.log" 2>&1 &
@@ -105,8 +110,83 @@ assert_logs_do_not_contain_secrets \
     "${temporary_directory}/policy.log" \
     "${temporary_directory}/app.log"
 assert_log_occurrences \
-    115 \
+    116 \
     "wasi-http-middleware-test: terminal-invocation" \
     "${temporary_directory}/app.log"
+
+kill "${app_pid}" >/dev/null 2>&1 || true
+wait "${app_pid}" >/dev/null 2>&1 || true
+app_pid=""
+optional_port=$((app_port + 2))
+optional_address="127.0.0.1:${optional_port}"
+"${wasmtime_bin}" serve \
+    -W component-model-async=y \
+    -S p3=y \
+    -S cli=y \
+    -S http=y \
+    -S inherit-network=y \
+    --env "WASI_MIDDLEWARE_CORS_ORIGINS=https://app.example" \
+    --env "WASI_MIDDLEWARE_CORS_METHODS=GET,HEAD,POST" \
+    --env "WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization" \
+    --env "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=false" \
+    --env "WASI_MIDDLEWARE_AUTHN_BROKER_URL=${policy_url}" \
+    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=2000" \
+    --env "WASI_MIDDLEWARE_AUTHN_MODE=optional" \
+    --env "WASI_MIDDLEWARE_SERVICE_ID=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT=64" \
+    --env "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK=true" \
+    --addr "${optional_address}" \
+    "${composed}" \
+    >"${temporary_directory}/optional.log" 2>&1 &
+app_pid=$!
+
+optional_ready=false
+for _ in $(seq 1 100); do
+    status="$(curl --silent --max-time 1 --output /dev/null --write-out '%{http_code}' "http://${optional_address}/auth-contract" || true)"
+    if [[ "${status}" == "200" ]]; then
+        optional_ready=true
+        break
+    fi
+    sleep 0.1
+done
+if [[ "${optional_ready}" != "true" ]]; then
+    echo "error: optional-authentication service did not become ready" >&2
+    cat "${temporary_directory}/optional.log" >&2
+    exit 1
+fi
+
+optional_headers="${temporary_directory}/optional-headers"
+optional_body="${temporary_directory}/optional-body"
+status="$(curl --silent --show-error --max-time 5 \
+    --dump-header "${optional_headers}" \
+    --output "${optional_body}" \
+    --write-out '%{http_code}' \
+    "http://${optional_address}/auth-contract")"
+if [[ "${status}" != "200" || "$(cat "${optional_body}")" != "anonymous" ]]; then
+    echo "error: optional mode did not inject anonymous context" >&2
+    cat "${optional_headers}" >&2
+    cat "${optional_body}" >&2
+    exit 1
+fi
+if grep -Eiq '^x-wasi-auth-' "${optional_headers}"; then
+    echo "error: optional mode exposed trusted request metadata in its response" >&2
+    cat "${optional_headers}" >&2
+    exit 1
+fi
+for token_status in "deny:403" "error:503"; do
+    token="${token_status%%:*}"
+    expected="${token_status##*:}"
+    actual="$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' \
+        --header "Authorization: Bearer ${token}" \
+        "http://${optional_address}/")"
+    if [[ "${actual}" != "${expected}" ]]; then
+        echo "error: optional mode downgraded supplied Bearer ${token}: ${actual}" >&2
+        exit 1
+    fi
+done
+assert_logs_do_not_contain_secrets \
+    "${temporary_directory}/policy.log" \
+    "${temporary_directory}/optional.log"
 
 echo "Wasmtime ${wasmtime_version} middleware E2E passed"

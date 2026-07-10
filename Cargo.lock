@@ -341,6 +341,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+name = "wasi-http-authn-runtime"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "futures",
+ "http",
+ "serde_json",
+ "thiserror",
+ "wasi-http-metadata",
+ "wasi-http-policy-core",
+ "wasip3",
+]
+
+[[package]]
 name = "wasi-http-metadata"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -352,12 +365,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasi-http-middleware-auth-policy"
+name = "wasi-http-middleware-authn-policy"
 version = "0.1.0-alpha.1"
 dependencies = [
  "http",
- "serde_json",
- "thiserror",
+ "wasi-http-authn-runtime",
  "wasi-http-metadata",
  "wasi-http-middleware-component-support",
  "wasi-http-policy-core",
@@ -389,14 +401,18 @@ dependencies = [
 name = "wasi-http-middleware-echo-service"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "http",
+ "wasi-http-metadata",
  "wasip3",
  "wit-bindgen 0.59.0",
 ]
 
 [[package]]
-name = "wasi-http-middleware-mock-policy"
+name = "wasi-http-middleware-mock-authn-broker"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "serde",
+ "serde_json",
  "wasip3",
  "wit-bindgen 0.59.0",
 ]

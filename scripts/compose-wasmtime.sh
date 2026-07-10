@@ -23,7 +23,7 @@ trap 'rm -rf "${temporary_directory}"' EXIT
 
 current="${terminal}"
 stage=0
-for component in auth-policy cors security-headers request-id; do
+for component in authn-policy cors security-headers request-id; do
     stage=$((stage + 1))
     next="${temporary_directory}/stage-${stage}.wasm"
     "${wac_bin}" plug \

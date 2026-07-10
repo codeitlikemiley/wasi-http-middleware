@@ -362,14 +362,6 @@ pub struct AuthnRequestV1 {
     pub service_id: String,
     /// Immutable configured audiences.
     pub audiences: Vec<String>,
-    /// Incoming HTTP method.
-    pub method: String,
-    /// Incoming URI scheme when known.
-    pub scheme: Option<String>,
-    /// Incoming authority when known.
-    pub authority: Option<String>,
-    /// Request path without a query string.
-    pub path: String,
     /// Canonical request ID.
     pub request_id: String,
 }

@@ -1,7 +1,8 @@
-//! Deterministic terminal policy service for authentication tests.
+//! Deterministic terminal authentication broker for component tests.
 
 #![deny(missing_docs)]
 
+use serde::Deserialize;
 use wasip3::wit_bindgen::StreamResult;
 use wasip3::{
     clocks::monotonic_clock::wait_for,
@@ -11,6 +12,17 @@ use wasip3::{
 
 struct Component;
 
+const MAX_REQUEST_SIZE: usize = 64 * 1024;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BrokerRequestV1 {
+    version: u8,
+    service_id: String,
+    audiences: Vec<String>,
+    request_id: String,
+}
+
 wasip3::http::service::export!(Component);
 
 impl wasip3::exports::http::handler::Guest for Component {
@@ -19,12 +31,18 @@ impl wasip3::exports::http::handler::Guest for Component {
         let path = request
             .get_path_with_query()
             .unwrap_or_else(|| "/".to_owned());
-        if !matches!(method, Method::Post) || path.split('?').next() != Some("/check") {
+        if !matches!(method, Method::Post) || path.split('?').next() != Some("/authenticate") {
             return response(404, None);
         }
 
         let authorization = request.get_headers().get("authorization");
-        drain_request(request).await?;
+        let body = collect_request(request).await?;
+        if authorization.is_empty() {
+            return response(401, None);
+        }
+        if !valid_broker_request(&body) {
+            return response(400, None);
+        }
         match authorization.as_slice() {
             [value] if value == b"Bearer allow" => response(
                 200,
@@ -46,27 +64,47 @@ impl wasip3::exports::http::handler::Guest for Component {
             ),
             [value] if value == b"Bearer limit-ok" => sized_policy_response(64 * 1024),
             [value] if value == b"Bearer limit-over" => sized_policy_response(64 * 1024 + 1),
-            [] | [_] => response(401, None),
+            [_] => response(401, None),
             _ => response(400, None),
         }
     }
 }
 
-async fn drain_request(request: Request) -> Result<(), ErrorCode> {
+async fn collect_request(request: Request) -> Result<Vec<u8>, ErrorCode> {
     let (result_writer, body_result) = wit_future::new(|| Ok(()));
     drop(result_writer);
     let (mut body, trailers) = Request::consume_body(request, body_result);
+    let mut output = Vec::new();
     loop {
-        let (status, _chunk) = body.read(Vec::with_capacity(8 * 1024)).await;
+        let (status, chunk) = body.read(Vec::with_capacity(8 * 1024)).await;
+        if output.len().saturating_add(chunk.len()) > MAX_REQUEST_SIZE {
+            return Err(ErrorCode::HttpRequestBodySize(Some(
+                MAX_REQUEST_SIZE as u64,
+            )));
+        }
+        output.extend_from_slice(&chunk);
         match status {
             StreamResult::Complete(_) => {}
             StreamResult::Dropped => {
-                let _trailers = trailers.await?;
-                return Ok(());
+                drop(trailers);
+                return Ok(output);
             }
             StreamResult::Cancelled => return Err(ErrorCode::InternalError(None)),
         }
     }
+}
+
+fn valid_broker_request(body: &[u8]) -> bool {
+    let Ok(request) = serde_json::from_slice::<BrokerRequestV1>(body) else {
+        return false;
+    };
+    request.version == 1
+        && !request.service_id.is_empty()
+        && request
+            .audiences
+            .iter()
+            .any(|audience| audience == &request.service_id)
+        && !request.request_id.is_empty()
 }
 
 fn sized_policy_response(size: usize) -> Result<Response, ErrorCode> {

@@ -36,6 +36,15 @@ require_header() {
     fi
 }
 
+require_absent_header() {
+    local name="$1"
+    if grep -Eiq "^${name}:" "${header_file}"; then
+        echo "error: response unexpectedly exposed ${name}" >&2
+        cat "${header_file}" >&2
+        return 1
+    fi
+}
+
 require_empty_body() {
     if [[ -s "${body_file}" ]]; then
         echo "error: response body was expected to be empty" >&2
@@ -117,6 +126,19 @@ if [[ "$(cat "${body_file}")" != "user-1" ]]; then
     exit 1
 fi
 
+require_status 200 \
+    --header 'Authorization: Bearer allow' \
+    --header 'x-wasi-auth-subject: attacker' \
+    --header 'x-wasi-auth-context: attacker' \
+    "${base_url}/auth-contract"
+if [[ "$(cat "${body_file}")" != "authenticated" ]]; then
+    echo "error: terminal did not receive one authenticated V1 context" >&2
+    cat "${body_file}" >&2
+    exit 1
+fi
+require_absent_header "x-wasi-auth-context"
+require_absent_header "x-wasi-auth-spoofed"
+
 require_status 204 \
     --request OPTIONS \
     --header 'Origin: https://app.example' \
@@ -141,15 +163,6 @@ require_header "location" '/'
 require_status 404 \
     --header 'Authorization: Bearer allow' \
     "${base_url}/missing"
-
-require_status 400 \
-    --path-as-is \
-    --header 'Authorization: Bearer allow' \
-    "${base_url}/admin/../public"
-require_status 400 \
-    --path-as-is \
-    --header 'Authorization: Bearer allow' \
-    "${base_url}/%2e%2e/public"
 
 payload="${temporary_directory}/payload"
 echo 'middleware-secret-body-sentinel' >"${payload}"
