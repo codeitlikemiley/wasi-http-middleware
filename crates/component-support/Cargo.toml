@@ -1,0 +1,10 @@
+[package]
+name = "wasi-http-middleware-component-support"
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.93"
+publish = false
+
+[dependencies]
+http = "1.4.1"
+wasip3 = { version = "=0.6.0", features = ["async-spawn"] }
