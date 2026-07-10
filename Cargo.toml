@@ -4,6 +4,7 @@ members = [
     "components/passthrough",
     "components/request-id",
     "components/security-headers",
+    "components/cors",
     "test-components/echo-service",
 ]
 resolver = "2"
