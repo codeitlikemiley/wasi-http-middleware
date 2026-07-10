@@ -7,11 +7,11 @@ spin_runtime_revision = "27451471b8ba0faeffa01c5a4ddd6daee9a9d526"
 spin_sdk_revision = "14e675aa877c2dd4040c631421dfdaf5d526fb40"
 wasmtime = "45.0.0"
 wasm_tools = "1.248.0"
-wac = "0.8.0"
+wac = "0.10.1"
+oha = "1.14.0"
 leptos_wasi = "0.4.0"
 
 [release]
 channel = "alpha"
 stable_spin_required = true
 publish = false
-

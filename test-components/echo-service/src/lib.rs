@@ -1,8 +1,9 @@
-//! Deterministic terminal WASIp3 service for middleware composition tests.
+//! Deterministic terminal `WASIp3` service for middleware composition tests.
 
 #![deny(missing_docs)]
 
 use wasip3::{
+    clocks::monotonic_clock::wait_for,
     http::types::{ErrorCode, Headers, Method, Request, Response},
     wit_future, wit_stream,
 };
@@ -13,6 +14,9 @@ wasip3::http::service::export!(Component);
 
 impl wasip3::exports::http::handler::Guest for Component {
     async fn handle(request: Request) -> Result<Response, ErrorCode> {
+        if request.get_headers().has("x-wasi-test-count") {
+            eprintln!("wasi-http-middleware-test: terminal-invocation");
+        }
         let method = request.get_method();
         let path = request
             .get_path_with_query()
@@ -34,9 +38,80 @@ impl wasip3::exports::http::handler::Guest for Component {
             (Method::Get, "/redirect") => {
                 response(302, vec![("location".to_owned(), b"/".to_vec())], None)
             }
+            (Method::Get | Method::Head, "/method") => response(
+                200,
+                vec![("allow".to_owned(), b"GET, HEAD".to_vec())],
+                matches!(method, Method::Get).then(|| b"method allowed\n".to_vec()),
+            ),
+            (_, "/method") => {
+                response(405, vec![("allow".to_owned(), b"GET, HEAD".to_vec())], None)
+            }
+            (_, "/too-large") => response(413, vec![], None),
+            (_, "/error") => response(500, vec![], None),
+            (Method::Get, "/delayed") => delayed_response(),
+            (Method::Get, "/failing-stream") => failing_stream_response(),
+            (Method::Get, "/trailers") => trailers_response(),
             _ => response(404, vec![], None),
         }
     }
+}
+
+fn delayed_response() -> Result<Response, ErrorCode> {
+    let fields = vec![("content-type".to_owned(), b"text/plain".to_vec())];
+    let headers =
+        Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
+    let (mut writer, reader) = wit_stream::new();
+    wit_bindgen::spawn(async move {
+        let remaining = writer.write_all(b"first\n".to_vec()).await;
+        if !remaining.is_empty() {
+            return;
+        }
+        wait_for(300_000_000).await;
+        let remaining = writer.write_all(b"second\n".to_vec()).await;
+        drop(remaining);
+    });
+    let (trailers_writer, trailers) = wit_future::new(|| Ok(None));
+    drop(trailers_writer);
+    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    Ok(response)
+}
+
+fn failing_stream_response() -> Result<Response, ErrorCode> {
+    let fields = vec![("content-type".to_owned(), b"text/plain".to_vec())];
+    let headers =
+        Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
+    let (mut writer, reader) = wit_stream::new();
+    wit_bindgen::spawn(async move {
+        let remaining = writer.write_all(b"partial body\n".to_vec()).await;
+        drop(remaining);
+    });
+    let (trailers_writer, trailers) =
+        wit_future::new(|| Err::<Option<Headers>, ErrorCode>(ErrorCode::InternalError(None)));
+    drop(trailers_writer);
+    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    Ok(response)
+}
+
+fn trailers_response() -> Result<Response, ErrorCode> {
+    let fields = vec![("content-type".to_owned(), b"text/plain".to_vec())];
+    let headers =
+        Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
+    let (mut writer, reader) = wit_stream::new();
+    wit_bindgen::spawn(async move {
+        let remaining = writer.write_all(b"body with trailer\n".to_vec()).await;
+        drop(remaining);
+    });
+    let (trailers_writer, trailers) = wit_future::new(echo_trailers);
+    drop(trailers_writer);
+    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    Ok(response)
+}
+
+fn echo_trailers() -> Result<Option<Headers>, ErrorCode> {
+    let trailer_fields = vec![("x-echo-trailer".to_owned(), b"preserved".to_vec())];
+    Headers::from_list(&trailer_fields)
+        .map(Some)
+        .map_err(|_| ErrorCode::HttpResponseTrailerSectionSize(None))
 }
 
 fn echo_body(request: Request) -> Result<Response, ErrorCode> {

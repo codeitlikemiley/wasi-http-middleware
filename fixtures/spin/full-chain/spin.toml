@@ -1,0 +1,39 @@
+spin_manifest_version = 2
+
+[application]
+name = "wasi-http-middleware-full-chain"
+version = "0.1.0-alpha.1"
+
+[[trigger.http]]
+route = "/..."
+component = "application"
+dependencies.middleware = [
+  { component = "request-id" },
+  { component = "security-headers" },
+  { component = "cors", inherit_configuration = ["environment"] },
+  { component = "auth-policy", inherit_configuration = ["environment", "allowed_outbound_hosts"] },
+]
+
+[component.application]
+source = "../../../artifacts/test-components/echo-service.wasm"
+allowed_outbound_hosts = ["http://127.0.0.1:19101"]
+
+[component.application.environment]
+WASI_MIDDLEWARE_CORS_ORIGINS = "https://app.example"
+WASI_MIDDLEWARE_CORS_METHODS = "GET,HEAD,POST"
+WASI_MIDDLEWARE_CORS_HEADERS = "content-type,authorization"
+WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS = "false"
+WASI_MIDDLEWARE_POLICY_URL = "http://127.0.0.1:19101/check"
+WASI_MIDDLEWARE_POLICY_TIMEOUT_MS = "2000"
+
+[component.request-id]
+source = "../../../artifacts/components/request-id.wasm"
+
+[component.security-headers]
+source = "../../../artifacts/components/security-headers.wasm"
+
+[component.cors]
+source = "../../../artifacts/components/cors.wasm"
+
+[component.auth-policy]
+source = "../../../artifacts/components/auth-policy.wasm"
