@@ -2,6 +2,8 @@
 members = [
     "crates/*",
     "components/passthrough",
+    "components/request-id",
+    "components/security-headers",
     "test-components/echo-service",
 ]
 resolver = "2"

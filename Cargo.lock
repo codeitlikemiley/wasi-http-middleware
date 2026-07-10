@@ -374,6 +374,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasi-http-middleware-request-id"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "wasi-http-middleware-component-support",
+ "wasi-http-policy-core",
+ "wasip3",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "wasi-http-middleware-security-headers"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "wasi-http-middleware-component-support",
+ "wasi-http-policy-core",
+ "wasip3",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "wasi-http-policy-core"
 version = "0.1.0-alpha.1"
 dependencies = [

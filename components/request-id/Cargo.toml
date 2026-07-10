@@ -1,0 +1,15 @@
+[package]
+name = "wasi-http-middleware-request-id"
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.93"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasi-http-middleware-component-support = { path = "../../crates/component-support" }
+wasi-http-policy-core = { path = "../../crates/policy-core" }
+wasip3 = { version = "=0.6.0", features = ["async-spawn"] }
+wit-bindgen = { version = "=0.57.1", features = ["async-spawn"] }
