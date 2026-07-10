@@ -4,7 +4,7 @@ Framework-neutral, streaming-safe HTTP middleware components for the final
 `wasi:http/middleware@0.3.0` contract. They can wrap any matching terminal
 service and do not depend on Spin SDK, Leptos, or an application framework.
 
-> **Alpha:** `0.2.0-alpha.1` targets final WASI 0.3 with Wasmtime 46.0.1.
+> **Alpha:** `0.2.0-alpha.2` targets final WASI 0.3 with Wasmtime 46.0.1.
 > Current Spin hosts do not yet link final `wasi:http@0.3.0`; their lanes are
 > explicit expected-incompatibility canaries, not runtime support claims.
 
@@ -21,8 +21,12 @@ request-id -> security-headers -> cors -> authn-policy -> application
 - `cors` uses exact allowlists and completes preflight before authentication.
 - `authn-policy` calls a credential-verification broker, fails closed, strips
   credentials and spoofed metadata, and injects one bounded versioned context.
-- `secure-defaults` fuses the same four policies into one component. Golden
-  Wasmtime tests require its responses to match the separate chain.
+- `secure-defaults` fuses the same four policies into one component. It is a
+  deprecated portable fallback scheduled for removal in `0.3.0`; immutable
+  WASI header rebuilding exceeds the production latency budget.
+- `wasi-http-authn` authenticates an ordinary terminal `http::Request` and
+  installs typed identity in `http::Extensions` without rebuilding WASI
+  request and response resources.
 
 The trusted `x-wasi-auth-context` header is request-only. Every authentication
 component removes all `x-wasi-auth-*` response fields before returning to a

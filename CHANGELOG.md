@@ -6,6 +6,21 @@ All notable changes are documented here.
 
 - No changes yet.
 
+## [0.2.0-alpha.2] - 2026-07-11
+
+### Added
+
+- A publishable, transport-neutral `wasi-http-authn` crate for trusted-ingress
+  and statically dispatched terminal-broker authentication.
+- Typed `VerifiedAuthContext` propagation through `http::Extensions` so trusted
+  identity is removed from the wire before terminal application dispatch.
+
+### Changed
+
+- The guest `secure-defaults` stack is now a portable experimental fallback,
+  not the recommended production architecture. It remains for this alpha and
+  is scheduled for removal in `0.3.0`.
+
 ## [0.2.0-alpha.1] - 2026-07-10
 
 ### Breaking

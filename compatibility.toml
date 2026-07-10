@@ -17,11 +17,11 @@ fuzz_rust = "nightly-2026-03-06"
 cosign = "3.1.1"
 oras = "1.3.2"
 oha = "1.14.0"
-leptos_wasi = "0.5.0-alpha.1"
-wasi_authz = "0.1.0-alpha.1"
+leptos_wasi = "0.5.0-alpha.2"
+wasi_authz = "0.1.0-alpha.2"
 
 [release]
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 channel = "alpha"
 stable_spin_required = false
 publish = false

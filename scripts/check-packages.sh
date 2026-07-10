@@ -15,6 +15,7 @@ import sys
 
 document = json.load(open(sys.argv[1], encoding="utf-8"))
 publishable = {
+    "wasi-http-authn",
     "wasi-http-metadata",
     "wasi-http-middleware-component-support",
     "wasi-http-policy-core",
@@ -31,6 +32,7 @@ PY
 
 expected_files=$'.cargo_vcs_info.json\nCargo.lock\nCargo.toml\nCargo.toml.orig\nREADME.md\nsrc/lib.rs'
 packages=(
+    wasi-http-authn
     wasi-http-metadata
     wasi-http-middleware-component-support
     wasi-http-policy-core
@@ -50,6 +52,23 @@ done
 cargo package --locked --allow-dirty -p wasi-http-metadata
 cargo package --locked --allow-dirty -p wasi-http-middleware-component-support
 
+# authn depends on metadata and policy-core in the same unpublished release
+# train. Its exact file list was checked above; full archive verification occurs
+# after those dependencies are published in the separate release action.
+authn_log="$(mktemp "${TMPDIR:-/tmp}/wasi-http-authn-package.XXXXXX")"
+if cargo package --locked --allow-dirty -p wasi-http-authn >"${authn_log}" 2>&1; then
+    echo "authn registry dependencies are available; full verification passed"
+else
+    grep -Eq 'no matching package named `(wasi-http-metadata|wasi-http-policy-core)` found' "${authn_log}" || {
+        cat "${authn_log}" >&2
+        rm -f "${authn_log}"
+        echo "authn packaging failed for an unexpected reason" >&2
+        exit 1
+    }
+    echo "authn verification is blocked until its 0.2.0-alpha.2 dependencies are published"
+fi
+rm -f "${authn_log}"
+
 # policy-core depends on the exact metadata alpha. Before the separate publish
 # action places metadata in the registry, verification must fail for that one
 # reason. The no-verify archive is still structurally inspected below.
@@ -65,7 +84,7 @@ else
         echo "policy-core packaging failed for an unexpected reason" >&2
         exit 1
     }
-    echo "policy-core verification is blocked until wasi-http-metadata 0.2.0-alpha.1 is published"
+    echo "policy-core verification is blocked until wasi-http-metadata 0.2.0-alpha.2 is published"
 fi
 rm -f "${policy_log}"
 
@@ -76,7 +95,7 @@ import tarfile
 import tomllib
 
 root = pathlib.Path("target/package")
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 packages = [
     "wasi-http-metadata",
     "wasi-http-middleware-component-support",

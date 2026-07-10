@@ -14,7 +14,7 @@ resolver = "2"
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 edition = "2024"
 rust-version = "1.93.0"
 license = "MIT OR Apache-2.0"
@@ -29,11 +29,11 @@ serde_json = "1.0"
 thiserror = "2.0"
 wit-bindgen = { version = "=0.59.0", features = ["async-spawn"] }
 wasip3 = { version = "=0.7.0", features = ["http-compat"] }
-wasi-http-metadata = { path = "crates/metadata", version = "=0.2.0-alpha.1" }
-wasi-http-authn = { path = "crates/authn", version = "=0.2.0-alpha.1" }
-wasi-http-authn-runtime = { path = "crates/authn-runtime", version = "=0.2.0-alpha.1" }
-wasi-http-policy-core = { path = "crates/policy-core", version = "=0.2.0-alpha.1" }
-wasi-http-middleware-component-support = { path = "crates/component-support", version = "=0.2.0-alpha.1" }
+wasi-http-metadata = { path = "crates/metadata", version = "=0.2.0-alpha.2" }
+wasi-http-authn = { path = "crates/authn", version = "=0.2.0-alpha.2" }
+wasi-http-authn-runtime = { path = "crates/authn-runtime", version = "=0.2.0-alpha.2" }
+wasi-http-policy-core = { path = "crates/policy-core", version = "=0.2.0-alpha.2" }
+wasi-http-middleware-component-support = { path = "crates/component-support", version = "=0.2.0-alpha.2" }
 
 [workspace.lints.rust]
 missing_docs = "deny"
