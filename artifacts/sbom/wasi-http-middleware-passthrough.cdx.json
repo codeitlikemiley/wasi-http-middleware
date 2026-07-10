@@ -3,7 +3,7 @@
   "components": [
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1",
+      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2",
       "description": "Streaming-safe helpers for WASIp3 HTTP middleware components",
       "externalReferences": [
         {
@@ -17,10 +17,10 @@
         }
       ],
       "name": "wasi-http-middleware-component-support",
-      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.1?download_url=file://../../crates/component-support",
+      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.2?download_url=file://../../crates/component-support",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.1"
+      "version": "0.2.0-alpha.2"
     },
     {
       "author": "David Tolnay <dtolnay@gmail.com>",
@@ -1591,11 +1591,11 @@
   "dependencies": [
     {
       "dependsOn": [
-        "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1",
+        "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2",
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./components/passthrough#wasi-http-middleware-passthrough@0.2.0-alpha.1"
+      "ref": "path+file://./components/passthrough#wasi-http-middleware-passthrough@0.2.0-alpha.2"
     },
     {
       "dependsOn": [
@@ -1603,7 +1603,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1"
+      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103"
@@ -1949,14 +1949,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./components/passthrough#wasi-http-middleware-passthrough@0.2.0-alpha.1",
+      "bom-ref": "path+file://./components/passthrough#wasi-http-middleware-passthrough@0.2.0-alpha.2",
       "components": [
         {
-          "bom-ref": "path+file://./components/passthrough#wasi-http-middleware-passthrough@0.2.0-alpha.1 bin-target-0",
+          "bom-ref": "path+file://./components/passthrough#wasi-http-middleware-passthrough@0.2.0-alpha.2 bin-target-0",
           "name": "wasi_http_middleware_passthrough",
-          "purl": "pkg:cargo/wasi-http-middleware-passthrough@0.2.0-alpha.1?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-middleware-passthrough@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.2.0-alpha.1"
+          "version": "0.2.0-alpha.2"
         }
       ],
       "description": "Streaming-safe WASIp3 HTTP middleware conformance component",
@@ -1972,10 +1972,10 @@
         }
       ],
       "name": "wasi-http-middleware-passthrough",
-      "purl": "pkg:cargo/wasi-http-middleware-passthrough@0.2.0-alpha.1?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-middleware-passthrough@0.2.0-alpha.2?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.1"
+      "version": "0.2.0-alpha.2"
     },
     "properties": [
       {
@@ -1991,7 +1991,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:ee441acd-733a-537c-bfcd-d80256195202",
+  "serialNumber": "urn:uuid:b3d7779a-cc5f-577e-96b1-5710f4817093",
   "specVersion": "1.5",
   "version": 1
 }

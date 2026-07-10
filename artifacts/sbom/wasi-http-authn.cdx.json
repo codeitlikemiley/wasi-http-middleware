@@ -75,41 +75,6 @@
       "version": "0.22.1"
     },
     {
-      "author": "The Rust Project Developers",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
-      "description": "A macro to generate structures which behave like bitflags. ",
-      "externalReferences": [
-        {
-          "type": "documentation",
-          "url": "https://docs.rs/bitflags"
-        },
-        {
-          "type": "website",
-          "url": "https://github.com/bitflags/bitflags"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/bitflags/bitflags"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "bitflags",
-      "purl": "pkg:cargo/bitflags@2.13.0",
-      "scope": "required",
-      "type": "library",
-      "version": "2.13.0"
-    },
-    {
       "author": "Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>",
       "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
       "description": "Types and traits for working with bytes",
@@ -135,307 +100,6 @@
       "scope": "required",
       "type": "library",
       "version": "1.12.1"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-channel@0.3.32",
-      "description": "Channels for asynchronous communication using futures-rs. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "07bbe89c50d7a535e539b8c17bc0b49bdb77747034daa8087407d655f3f7cc1d"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-channel",
-      "purl": "pkg:cargo/futures-channel@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-core@0.3.32",
-      "description": "The core traits and types in for the `futures` library. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "7e3450815272ef58cec6d564423f6e755e25379b217b0bc688e295ba24df6b1d"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-core",
-      "purl": "pkg:cargo/futures-core@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-executor@0.3.32",
-      "description": "Executors for asynchronous tasks based on the futures-rs library. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "baf29c38818342a3b26b5b923639e7b1f4a61fc5e76102d4b1981c6dc7a7579d"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-executor",
-      "purl": "pkg:cargo/futures-executor@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-io@0.3.32",
-      "description": "The `AsyncRead`, `AsyncWrite`, `AsyncSeek`, and `AsyncBufRead` traits for the futures-rs library. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "cecba35d7ad927e23624b22ad55235f2239cfa44fd10428eecbeba6d6a717718"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-io",
-      "purl": "pkg:cargo/futures-io@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-macro@0.3.32",
-      "description": "The futures-rs procedural macro implementations. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-macro",
-      "purl": "pkg:cargo/futures-macro@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-sink@0.3.32",
-      "description": "The asynchronous `Sink` trait for the futures-rs library. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "c39754e157331b013978ec91992bde1ac089843443c49cbc7f46150b0fad0893"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-sink",
-      "purl": "pkg:cargo/futures-sink@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-task@0.3.32",
-      "description": "Tools for working with tasks. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "037711b3d59c33004d3856fbdc83b99d4ff37a24768fa1be9ce3538a1cde4393"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-task",
-      "purl": "pkg:cargo/futures-task@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures-util@0.3.32",
-      "description": "Common utilities and extension traits for the futures-rs library. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "389ca41296e6190b48053de0321d02a77f32f8a5d2461dd38762c0593805c6d6"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures-util",
-      "purl": "pkg:cargo/futures-util@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#futures@0.3.32",
-      "description": "An implementation of futures and streams featuring zero allocations, composability, and iterator-like interfaces. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://rust-lang.github.io/futures-rs"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/rust-lang/futures-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "8b147ee9d1f6d097cef9ce628cd2ee62288d963e16fb287bd9286455b241382d"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT OR Apache-2.0"
-        }
-      ],
-      "name": "futures",
-      "purl": "pkg:cargo/futures@0.3.32",
-      "scope": "required",
-      "type": "library",
-      "version": "0.3.32"
-    },
-    {
-      "author": "Carl Lerche <me@carllerche.com>, Lucio Franco <luciofranco14@gmail.com>, Sean McArthur <sean@seanmonstar.com>",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#http-body@1.0.1",
-      "description": "Trait representing an asynchronous, streaming, HTTP request or response body. ",
-      "externalReferences": [
-        {
-          "type": "documentation",
-          "url": "https://docs.rs/http-body"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/hyperium/http-body"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT"
-        }
-      ],
-      "name": "http-body",
-      "purl": "pkg:cargo/http-body@1.0.1",
-      "scope": "required",
-      "type": "library",
-      "version": "1.0.1"
     },
     {
       "author": "Alex Crichton <alex@alexcrichton.com>, Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>",
@@ -533,32 +197,6 @@
       "scope": "required",
       "type": "library",
       "version": "2.8.3"
-    },
-    {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#pin-project-lite@0.2.17",
-      "description": "A lightweight version of pin-project written with declarative macros. ",
-      "externalReferences": [
-        {
-          "type": "vcs",
-          "url": "https://github.com/taiki-e/pin-project-lite"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "Apache-2.0 OR MIT"
-        }
-      ],
-      "name": "pin-project-lite",
-      "purl": "pkg:cargo/pin-project-lite@0.2.17",
-      "scope": "required",
-      "type": "library",
-      "version": "0.2.17"
     },
     {
       "author": "David Tolnay <dtolnay@gmail.com>, Alex Crichton <alex@alexcrichton.com>",
@@ -759,33 +397,6 @@
       "version": "1.0.150"
     },
     {
-      "author": "Carl Lerche <me@carllerche.com>",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#slab@0.4.12",
-      "description": "Pre-allocated storage for a uniform data type",
-      "externalReferences": [
-        {
-          "type": "vcs",
-          "url": "https://github.com/tokio-rs/slab"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "MIT"
-        }
-      ],
-      "name": "slab",
-      "purl": "pkg:cargo/slab@0.4.12",
-      "scope": "required",
-      "type": "library",
-      "version": "0.4.12"
-    },
-    {
       "author": "David Tolnay <dtolnay@gmail.com>",
       "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
       "description": "Parser for Rust source code",
@@ -906,67 +517,6 @@
       "version": "1.0.24"
     },
     {
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
-      "description": "WASIp3 API bindings for Rust",
-      "externalReferences": [
-        {
-          "type": "documentation",
-          "url": "https://docs.rs/wasip3"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/bytecodealliance/wasi-rs"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "07aa681120704bf09828d1f7cf7e763666c1dc6a36e5096efd0ad9aadfb302d3"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
-        }
-      ],
-      "name": "wasip3",
-      "purl": "pkg:cargo/wasip3@0.7.0+wasi-0.3.0",
-      "scope": "required",
-      "type": "library",
-      "version": "0.7.0+wasi-0.3.0"
-    },
-    {
-      "author": "Alex Crichton <alex@alexcrichton.com>",
-      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.57.1",
-      "description": "Rust bindings generator and runtime support for WIT and the component model. Used when compiling Rust programs to the component model. ",
-      "externalReferences": [
-        {
-          "type": "website",
-          "url": "https://github.com/bytecodealliance/wit-bindgen"
-        },
-        {
-          "type": "vcs",
-          "url": "https://github.com/bytecodealliance/wit-bindgen"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-256",
-          "content": "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
-        }
-      ],
-      "licenses": [
-        {
-          "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
-        }
-      ],
-      "name": "wit-bindgen",
-      "purl": "pkg:cargo/wit-bindgen@0.57.1",
-      "scope": "required",
-      "type": "library",
-      "version": "0.57.1"
-    },
-    {
       "author": "David Tolnay <dtolnay@gmail.com>",
       "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.21",
       "description": "A double-to-string conversion algorithm based on Schubfach and yy",
@@ -1001,15 +551,12 @@
   "dependencies": [
     {
       "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#futures@0.3.32",
         "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2",
-        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
         "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2",
-        "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2",
-        "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0"
+        "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2"
       ],
-      "ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.2.0-alpha.2"
+      "ref": "path+file://./crates/authn#wasi-http-authn@0.2.0-alpha.2"
     },
     {
       "dependsOn": [
@@ -1035,78 +582,7 @@
       "ref": "registry+https://github.com/rust-lang/crates.io-index#base64@0.22.1"
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0"
-    },
-    {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#futures-core@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-sink@0.3.32"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-channel@0.3.32"
-    },
-    {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-core@0.3.32"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#futures-core@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-task@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-util@0.3.32"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-executor@0.3.32"
-    },
-    {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-io@0.3.32"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
-        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
-        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-macro@0.3.32"
-    },
-    {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-sink@0.3.32"
-    },
-    {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-task@0.3.32"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#futures-channel@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-core@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-io@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-macro@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-sink@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-task@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
-        "registry+https://github.com/rust-lang/crates.io-index#pin-project-lite@0.2.17",
-        "registry+https://github.com/rust-lang/crates.io-index#slab@0.4.12"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures-util@0.3.32"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#futures-channel@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-core@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-executor@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-io@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-sink@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-task@0.3.32",
-        "registry+https://github.com/rust-lang/crates.io-index#futures-util@0.3.32"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#futures@0.3.32"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
-        "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#http-body@1.0.1"
     },
     {
       "dependsOn": [
@@ -1120,9 +596,6 @@
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3"
-    },
-    {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#pin-project-lite@0.2.17"
     },
     {
       "dependsOn": [
@@ -1168,9 +641,6 @@
       "ref": "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150"
     },
     {
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#slab@0.4.12"
-    },
-    {
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
         "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
@@ -1196,23 +666,6 @@
       "ref": "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24"
     },
     {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
-        "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2",
-        "registry+https://github.com/rust-lang/crates.io-index#http-body@1.0.1",
-        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
-        "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.57.1"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0"
-    },
-    {
-      "dependsOn": [
-        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
-        "registry+https://github.com/rust-lang/crates.io-index#futures@0.3.32"
-      ],
-      "ref": "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.57.1"
-    },
-    {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.21"
     }
   ],
@@ -1225,17 +678,17 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.2.0-alpha.2",
+      "bom-ref": "path+file://./crates/authn#wasi-http-authn@0.2.0-alpha.2",
       "components": [
         {
-          "bom-ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.2.0-alpha.2 bin-target-0",
-          "name": "wasi_http_authn_runtime",
-          "purl": "pkg:cargo/wasi-http-authn-runtime@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
+          "bom-ref": "path+file://./crates/authn#wasi-http-authn@0.2.0-alpha.2 bin-target-0",
+          "name": "wasi_http_authn",
+          "purl": "pkg:cargo/wasi-http-authn@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
           "type": "library",
           "version": "0.2.0-alpha.2"
         }
       ],
-      "description": "Internal fail-closed authentication broker runtime for WASIp3 middleware",
+      "description": "In-process authentication boundary for WASI HTTP applications",
       "externalReferences": [
         {
           "type": "vcs",
@@ -1247,8 +700,8 @@
           "expression": "MIT OR Apache-2.0"
         }
       ],
-      "name": "wasi-http-authn-runtime",
-      "purl": "pkg:cargo/wasi-http-authn-runtime@0.2.0-alpha.2?download_url=file://.",
+      "name": "wasi-http-authn",
+      "purl": "pkg:cargo/wasi-http-authn@0.2.0-alpha.2?download_url=file://.",
       "scope": "required",
       "type": "library",
       "version": "0.2.0-alpha.2"
@@ -1267,7 +720,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:6db85417-7173-5d66-aa51-ca1885e4d948",
+  "serialNumber": "urn:uuid:2bd81a7f-1615-57e8-96d1-3186519eb9d8",
   "specVersion": "1.5",
   "version": 1
 }

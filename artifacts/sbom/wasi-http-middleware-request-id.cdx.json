@@ -3,7 +3,7 @@
   "components": [
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1",
+      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2",
       "description": "Streaming-safe helpers for WASIp3 HTTP middleware components",
       "externalReferences": [
         {
@@ -17,14 +17,14 @@
         }
       ],
       "name": "wasi-http-middleware-component-support",
-      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.1?download_url=file://../../crates/component-support",
+      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.2?download_url=file://../../crates/component-support",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.1"
+      "version": "0.2.0-alpha.2"
     },
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1",
+      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2",
       "description": "Trusted HTTP metadata contract for composed WASI middleware",
       "externalReferences": [
         {
@@ -38,14 +38,14 @@
         }
       ],
       "name": "wasi-http-metadata",
-      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.1?download_url=file://../../crates/metadata",
+      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.2?download_url=file://../../crates/metadata",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.1"
+      "version": "0.2.0-alpha.2"
     },
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1",
+      "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2",
       "description": "Pure policy engine for reusable WASI HTTP middleware components",
       "externalReferences": [
         {
@@ -59,10 +59,10 @@
         }
       ],
       "name": "wasi-http-policy-core",
-      "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.1?download_url=file://../../crates/policy-core",
+      "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.2?download_url=file://../../crates/policy-core",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.1"
+      "version": "0.2.0-alpha.2"
     },
     {
       "author": "David Tolnay <dtolnay@gmail.com>",
@@ -1664,12 +1664,12 @@
   "dependencies": [
     {
       "dependsOn": [
-        "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1",
-        "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1",
+        "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2",
+        "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2",
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./components/request-id#wasi-http-middleware-request-id@0.2.0-alpha.1"
+      "ref": "path+file://./components/request-id#wasi-http-middleware-request-id@0.2.0-alpha.2"
     },
     {
       "dependsOn": [
@@ -1677,7 +1677,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1"
+      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2"
     },
     {
       "dependsOn": [
@@ -1687,7 +1687,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18"
       ],
-      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1"
+      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2"
     },
     {
       "dependsOn": [
@@ -1695,9 +1695,9 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
-        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1"
+        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2"
       ],
-      "ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1"
+      "ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103"
@@ -2046,14 +2046,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./components/request-id#wasi-http-middleware-request-id@0.2.0-alpha.1",
+      "bom-ref": "path+file://./components/request-id#wasi-http-middleware-request-id@0.2.0-alpha.2",
       "components": [
         {
-          "bom-ref": "path+file://./components/request-id#wasi-http-middleware-request-id@0.2.0-alpha.1 bin-target-0",
+          "bom-ref": "path+file://./components/request-id#wasi-http-middleware-request-id@0.2.0-alpha.2 bin-target-0",
           "name": "wasi_http_middleware_request_id",
-          "purl": "pkg:cargo/wasi-http-middleware-request-id@0.2.0-alpha.1?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-middleware-request-id@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.2.0-alpha.1"
+          "version": "0.2.0-alpha.2"
         }
       ],
       "description": "Canonical request correlation middleware for WASIp3 HTTP services",
@@ -2069,10 +2069,10 @@
         }
       ],
       "name": "wasi-http-middleware-request-id",
-      "purl": "pkg:cargo/wasi-http-middleware-request-id@0.2.0-alpha.1?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-middleware-request-id@0.2.0-alpha.2?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.1"
+      "version": "0.2.0-alpha.2"
     },
     "properties": [
       {
@@ -2088,7 +2088,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:5f63a1b9-9188-538d-a899-f18497bcc410",
+  "serialNumber": "urn:uuid:d8b14b67-edf1-5667-a76d-e8f764122756",
   "specVersion": "1.5",
   "version": 1
 }
