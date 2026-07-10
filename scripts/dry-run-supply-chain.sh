@@ -63,6 +63,15 @@ COSIGN_PASSWORD="" "${cosign_bin}" sign-blob --yes \
     --bundle "${output_root}/provenance.sigstore.json" \
     --insecure-ignore-tlog \
     "${provenance}" >/dev/null
+COSIGN_PASSWORD="" "${cosign_bin}" sign-blob --yes \
+    --key "${temporary_keys}/cosign.key" \
+    --bundle "${output_root}/manifest.sigstore.json" \
+    "${output_root}/manifest.json" >/dev/null
+"${cosign_bin}" verify-blob \
+    --key "${temporary_keys}/cosign.pub" \
+    --bundle "${output_root}/manifest.sigstore.json" \
+    --insecure-ignore-tlog \
+    "${output_root}/manifest.json" >/dev/null
 cp "${temporary_keys}/cosign.pub" "${output_root}/cosign.pub"
 
 echo "local OCI layout and verified signature are in ${output_root}"
