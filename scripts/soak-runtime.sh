@@ -25,19 +25,8 @@ case "${host}" in
         policy_port="${SOAK_POLICY_PORT:-19301}"
         ;;
     spin)
-        app_port="19100"
-        policy_port="19101"
-        spin_revision="$(compat_value spin_middleware_revision)"
-        spin_short_revision="${spin_revision:0:7}"
-        spin_bin="${SPIN_BIN:-spin}"
-        if ! command -v "${spin_bin}" >/dev/null 2>&1; then
-            echo "error: pinned Spin is required for the soak" >&2
-            exit 1
-        fi
-        if [[ "$("${spin_bin}" --version 2>&1)" != *"${spin_short_revision}"* ]]; then
-            echo "error: Spin does not match ${spin_revision}" >&2
-            exit 1
-        fi
+        echo "error: Spin cannot host final wasi:http@0.3.0; use the compatibility canary" >&2
+        exit 2
         ;;
     *)
         echo "error: HOST must be wasmtime or spin" >&2
@@ -47,7 +36,7 @@ esac
 
 app_address="127.0.0.1:${app_port}"
 policy_address="127.0.0.1:${policy_port}"
-policy_url="http://${policy_address}/check"
+policy_url="http://${policy_address}/authenticate"
 report_directory="${REPORT_ROOT}/soak"
 mkdir -p "${report_directory}"
 result="${report_directory}/${host}.json"
@@ -76,7 +65,7 @@ trap cleanup EXIT
     -S cli=y \
     -S http=y \
     --addr "${policy_address}" \
-    "$(test_component_file mock-policy)" \
+    "$(test_component_file mock-authn-broker)" \
     >"${temporary_directory}/policy.log" 2>&1 &
 policy_pid=$!
 
@@ -90,33 +79,29 @@ if [[ "${status:-000}" != "401" ]]; then
     exit 1
 fi
 
-if [[ "${host}" == "wasmtime" ]]; then
-    composed="${ARTIFACT_ROOT}/composed/soak-full-chain.wasm"
-    bash "${REPO_ROOT}/scripts/compose-wasmtime.sh" \
-        "$(test_component_file echo-service)" "${composed}"
-    "${wasmtime_bin}" serve \
-        -W component-model-async=y \
-        -S p3=y \
-        -S cli=y \
-        -S http=y \
-        -S inherit-network=y \
-        --env "WASI_MIDDLEWARE_CORS_ORIGINS=https://app.example" \
-        --env "WASI_MIDDLEWARE_CORS_METHODS=GET,HEAD,POST" \
-        --env "WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization" \
-        --env "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=false" \
-        --env "WASI_MIDDLEWARE_POLICY_URL=${policy_url}" \
-        --env "WASI_MIDDLEWARE_POLICY_TIMEOUT_MS=2000" \
-        --addr "${app_address}" \
-        "${composed}" >"${temporary_directory}/application.log" 2>&1 &
-    app_pid=$!
-else
-    rm -rf "${REPO_ROOT}/fixtures/spin/full-chain/.spin"
-    "${spin_bin}" up \
-        --from "${REPO_ROOT}/fixtures/spin/full-chain/spin.toml" \
-        --listen "${app_address}" \
-        >"${temporary_directory}/application.log" 2>&1 &
-    app_pid=$!
-fi
+composed="${ARTIFACT_ROOT}/composed/soak-full-chain.wasm"
+bash "${REPO_ROOT}/scripts/compose-wasmtime.sh" \
+    "$(test_component_file echo-service)" "${composed}"
+"${wasmtime_bin}" serve \
+    -W component-model-async=y \
+    -S p3=y \
+    -S cli=y \
+    -S http=y \
+    -S inherit-network=y \
+    --env "WASI_MIDDLEWARE_CORS_ORIGINS=https://app.example" \
+    --env "WASI_MIDDLEWARE_CORS_METHODS=GET,HEAD,POST" \
+    --env "WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization" \
+    --env "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=false" \
+    --env "WASI_MIDDLEWARE_AUTHN_BROKER_URL=${policy_url}" \
+    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=2000" \
+    --env "WASI_MIDDLEWARE_AUTHN_MODE=required" \
+    --env "WASI_MIDDLEWARE_SERVICE_ID=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT=64" \
+    --env "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK=true" \
+    --addr "${app_address}" \
+    "${composed}" >"${temporary_directory}/application.log" 2>&1 &
+app_pid=$!
 
 for _ in $(seq 1 150); do
     status="$(curl --silent --max-time 1 --header 'Authorization: Bearer allow' --output /dev/null --write-out '%{http_code}' "http://${app_address}/" || true)"
@@ -155,11 +140,6 @@ load_pid=""
 assert_logs_do_not_contain_secrets \
     "${temporary_directory}/policy.log" \
     "${temporary_directory}/application.log"
-if [[ "${host}" == "spin" ]]; then
-    assert_logs_do_not_contain_secrets \
-        "${REPO_ROOT}/fixtures/spin/full-chain/.spin/logs/application_stdout.txt" \
-        "${REPO_ROOT}/fixtures/spin/full-chain/.spin/logs/application_stderr.txt"
-fi
 if ! python3 "${REPO_ROOT}/scripts/check-soak.py" "${result}" "${memory}" "${summary}"; then
     cat "${temporary_directory}/policy.log" >&2
     cat "${temporary_directory}/application.log" >&2
