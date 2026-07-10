@@ -11,6 +11,7 @@ members = [
     "test-components/mock-authn-broker",
 ]
 resolver = "2"
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0-alpha.1"
