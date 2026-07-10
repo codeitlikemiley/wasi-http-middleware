@@ -341,6 +341,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+name = "wasi-http-authn"
+version = "0.2.0-alpha.1"
+dependencies = [
+ "futures",
+ "http",
+ "thiserror",
+ "wasi-http-metadata",
+ "wasi-http-policy-core",
+]
+
+[[package]]
 name = "wasi-http-authn-runtime"
 version = "0.2.0-alpha.1"
 dependencies = [

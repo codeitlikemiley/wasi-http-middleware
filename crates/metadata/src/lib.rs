@@ -354,6 +354,46 @@ pub struct AuthContextV1 {
     policy_revision: Option<String>,
 }
 
+/// Authentication context validated by a trusted ingress or broker boundary.
+///
+/// This type is intended for storage in [`http::Extensions`]. Unlike the wire
+/// header, it is not serialized when a request or response is reconstructed.
+#[derive(Clone, Eq, PartialEq)]
+pub struct VerifiedAuthContext(AuthContextV1);
+
+impl fmt::Debug for VerifiedAuthContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("VerifiedAuthContext")
+            .field("state", &self.0.state())
+            .field("trusted_metadata", &"<redacted>")
+            .finish_non_exhaustive()
+    }
+}
+
+impl VerifiedAuthContext {
+    /// Marks a context as verified by the current process trust boundary.
+    ///
+    /// Callers must only use this after validating the context's source,
+    /// service binding, audience, and lifetime.
+    #[must_use]
+    pub fn new(context: AuthContextV1) -> Self {
+        Self(context)
+    }
+
+    /// Returns the verified authentication context.
+    #[must_use]
+    pub fn context(&self) -> &AuthContextV1 {
+        &self.0
+    }
+
+    /// Consumes the wrapper and returns the authentication context.
+    #[must_use]
+    pub fn into_inner(self) -> AuthContextV1 {
+        self.0
+    }
+}
+
 impl fmt::Debug for AuthContextV1 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
