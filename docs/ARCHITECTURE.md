@@ -2,76 +2,78 @@
 
 ## Composition model
 
-Each middleware is a separately compiled component that imports and exports
-`wasi:http/handler@0.3.0-rc-2026-03-15`. A host or build-time composer wires the
-export of the inner component to the handler import of the next outer
-component. There is no proxy process or network hop between middleware and the
-application.
+Every production component imports and exports `wasi:http/handler@0.3.0`.
+WAC wires the terminal handler into each middleware at build time; there is no
+sidecar process or network hop between middleware and the application.
 
 ```text
 client
   -> request-id
   -> security-headers
   -> cors
-  -> auth-policy
+  -> authn-policy
   -> terminal service
 ```
 
-Requests flow left to right. Responses unwind right to left. Consequently,
-request ID and security headers also decorate authentication rejections and
-CORS preflight responses.
-
-Spin composes the ordered `dependencies.middleware` list when loading an HTTP
-trigger. Wasmtime receives one component produced by `compose-wasmtime.sh`.
-The same middleware artifacts can therefore be reused by different projects,
-while each trigger selects its own chain and capability inheritance.
+`secure-defaults` implements the same order in one component. Requests flow
+inward and responses unwind outward, so CORS preflight precedes authentication
+and request/security headers decorate controlled rejections.
 
 ## Crate boundaries
 
-- `wasi-http-policy-core` contains pure request ID, security-header, CORS, and
-  external-policy decision logic.
-- `wasi-http-metadata` owns the reserved trusted-header contract.
-- `wasi-http-middleware-component-support` translates header fields and moves
-  request/response body streams and trailers without collecting them.
-- Each `components/*` crate owns only host interaction and one middleware
-  policy.
-- `passthrough` plus `test-components/*` are deterministic conformance fixtures
-  and never ship as production middleware.
+- `wasi-http-policy-core` contains pure request-ID, header, CORS, broker-response,
+  and defensive path utilities.
+- `wasi-http-metadata` owns the bounded `AuthContextV1` wire contract.
+- `wasi-http-authn-runtime` validates broker configuration and owns broker I/O,
+  deadlines, cancellation, and in-flight admission.
+- `wasi-http-middleware-component-support` preserves message resources while
+  applying header diffs.
+- `components/*` exports standard middleware components only.
+- `test-components/*` and `passthrough` are conformance fixtures, not production
+  identity services.
 
-The policy crates do not depend on Spin or Leptos. The production components
-generate their standard world with `wit-bindgen` and use the pinned `wasip3`
-resource types.
+The shared metadata and component-support crates are ordinary Rust library APIs.
+Production components contain no Leptos or Spin SDK dependency.
 
 ## Streaming invariant
 
-Middleware may copy bounded HTTP header fields, but it must transfer body and
-trailer resources directly. It must not collect an application request or
-response body. The only intentionally buffered body is the authentication
-policy response, capped at 64 KiB because it is a small control-plane message.
+Application request and response bodies are never collected by middleware.
+Header replacement transfers the original body and body-result resources. Each
+wrapper relays the new message's `transmission_result` into the original
+`consume_body` result; discarding either future can cancel an upstream producer
+and lose the first frame when a stream immediately fails.
 
-The component ABI check verifies both handler sides and compares every import
-against an exact per-component allowlist. Runtime tests exercise streamed
-request bodies, delayed first bytes, successful trailers/body association,
-failing response streams, client disconnects, and concurrent requests. The
-pinned hosts differ when surfacing a failed stream: Wasmtime may commit a 200
-before closing, while Spin can close before committing headers; neither path
-may hang or silently report a complete body.
+Regression coverage repeats the exact sequence `first frame -> body-result
+error` through stacked components and requires every response that committed
+headers to deliver the first frame before `None` or an error. Delayed streams,
+trailers, disconnects, request bodies, and failing streams are also covered.
+Malformed header blocks rejected by the host before guest invocation cannot be
+made equivalent by middleware and are treated as a host boundary.
 
-The two projects under `fixtures/spin/` reuse the same artifacts with different
-middleware lists and CORS settings. Their contract check ensures configuration
-does not bleed between projects. The public-stack project is a test fixture,
-not an authenticated production manifest; the production manifest auditor
-intentionally requires the complete default chain.
+The authentication request JSON is bounded control-plane data. Broker response
+bodies are buffered to at most 64 KiB; application bodies remain streaming.
 
-## Policy placement
+## Authentication versus authorization
 
-Component middleware owns transport-wide concerns: correlation, conservative
-response headers, CORS, and coarse authentication. Domain authorization stays
-inside the terminal application, such as Leptos `ServerFn::middlewares()`.
-Ingress still owns TLS, trusted client IPs, WAF rules, distributed rate limits,
-global deadlines, and static asset policy.
+`authn-policy` verifies a credential and emits one request-only context. The
+broker receives no route, method, authority, query, cookie, or body. The
+application receives no `Authorization` header. It uses the canonical
+`(issuer, subject)` pair and claims for domain authorization. In Leptos this
+belongs in `ServerFn::middlewares()`, where resource ownership and business
+rules are available.
 
-HTTP middleware binaries cannot wrap Redis, MQTT, cron, or custom triggers
-because those triggers export different WIT interfaces. A future adapter may
-reuse the pure policy crates, but it is a separate component and compatibility
-contract.
+Ingress still owns TLS, HSTS, WAF policy, proxy identity, distributed limits,
+global deadlines, and static asset controls. `/pkg/...` split-Wasm assets stay
+public unless the CDN/fileserver/ingress explicitly protects them.
+
+## Host and trigger boundary
+
+Wasmtime 46.0.1 runs the final WASI 0.3 behavioral suite. Spin 4.0.0 lacks final
+`wasi:http@0.3.0` resource implementations, and the pinned native-middleware
+commit targets the March RC. WAC precomposition cannot compensate for a host
+linker that lacks final resources, so both Spin lanes are incompatibility
+canaries.
+
+HTTP middleware cannot wrap Redis, MQTT, cron, or custom triggers because they
+export different WIT worlds. Future adapters may reuse pure policy crates, but
+each adapter needs its own capability, lifecycle, and compatibility contract.

@@ -1,62 +1,52 @@
 # Trust boundary
 
-## Required deployment invariant
+## Required invariant
 
-The terminal application is trusted only when every externally reachable route
-to it passes through the declared middleware chain. Never expose a second HTTP
-trigger, service address, or ingress route that reaches the same terminal
-component directly. Run `audit-spin-manifest.py` for every production manifest.
-The audit also requires the primary component's outbound allowlist to equal the
-single origin derived from `WASI_MIDDLEWARE_POLICY_URL`; adding another host
-would silently broaden the authentication component's inherited network power.
+The terminal trusts `x-wasi-auth-context` only when every externally reachable
+route passes through the declared component boundary. No second trigger,
+service address, or ingress route may reach it directly. Run
+`audit-spin-manifest.py` for future native Spin manifests; current Spin final-WIT
+fixtures are incompatibility canaries, not deployable production manifests.
 
-`x-wasi-auth-*` fields are not credentials. They are trusted metadata only
-after `auth-policy` has removed all client-supplied reserved fields, received an
-allow decision, validated the response, and inserted canonical values. The
-application must reject or ignore those fields when the composed boundary is
-not guaranteed.
+The context is metadata, not a credential. Middleware first strips the client
+`Authorization` value and every reserved header, then inserts one validated
+context. The terminal must reject the header when composition is not guaranteed.
 
 ## Responsibilities
 
 | Boundary | Responsibilities |
 |---|---|
-| Ingress/host | TLS, HSTS, WAF, trusted proxy/IP handling, global deadlines, distributed rate limiting, static assets |
-| Component chain | Request ID, conservative headers, CORS, coarse authentication, metadata sanitization |
-| Policy service | Credential verification, issuer/key lifecycle, revocation, central coarse policy |
+| Ingress/host | TLS/HSTS, WAF, trusted proxy data, global deadlines, distributed limits, static assets |
+| Component boundary | Request ID, conservative response headers, CORS, credential verification, metadata sanitization |
+| Authentication broker | Credential, issuer/key lifecycle, revocation, identity claims |
 | Application | Resource ownership and domain authorization |
 
-## Capability isolation
-
-Request ID and security headers require no inherited application capability.
-CORS receives only environment configuration. Authentication receives only
-environment configuration and the policy service's outbound host.
-
-Spin currently inherits middleware capabilities from the primary component's
-configuration. Therefore the primary component must also declare the policy
-host and middleware environment values. Deny adapters prevent other
-capabilities from reaching middleware, but they do not remove those declarations
-from the primary component. If the terminal application must not possess the
-policy-service network capability, move authentication to ingress or a
-separately deployed policy proxy.
+Request ID and security headers import no environment or outbound HTTP. CORS
+imports environment only. Authentication imports environment, monotonic clocks,
+random, and WASI HTTP client. Deployment must grant only the exact configured
+broker origin. `authn-policy` sends no request authorization inputs beyond the
+credential itself and immutable deployment/request IDs.
 
 ## Failure policy
 
-- Invalid CORS configuration fails initialization; disallowed requests receive
-  403.
-- Invalid or duplicate authorization receives 400 without contacting policy.
-- Missing credentials receive the policy service's 401 decision.
-- Policy failure, timeout, invalid JSON, invalid identity, or an unknown status
-  becomes 503. Authentication never fails open.
-- Ambiguous or multiply encoded policy paths receive 400 before an outbound
-  policy call.
-- Middleware never returns raw host or policy error details to clients.
+- Invalid cached configuration returns generic 503, never a raw host error.
+- Duplicate/oversized/malformed Authorization returns 400 without a broker call.
+- Missing credentials return 401 in required mode or anonymous context in
+  optional mode.
+- Supplied invalid credentials return 401/403; optional mode never fails open.
+- Broker failure, deadline, saturation, malformed success, or unknown status is
+  503.
+- Body-result errors propagate after already-delivered frames; middleware does
+  not buffer or convert them into successful completion.
 
 ## Sensitive data
 
-Do not log authorization values, cookies, bodies, raw queries, policy secrets,
-or trusted identity header values. Request IDs are loggable only after
-canonical validation. Production telemetry may record method, normalized path,
-status, duration, byte counts, middleware class, and an error class.
+Never log credentials, cookies, bodies, raw queries, trusted identity values,
+session IDs, or context headers. A request ID is loggable only after canonical
+validation. Safe telemetry includes status, duration, byte counts, middleware
+class, and coarse error class.
 
-The mock policy and echo components are test fixtures. Their deterministic
-tokens and identity must never be deployed as a real identity provider.
+The mock broker uses deterministic test tokens (`Bearer allow`, `deny`,
+`error`, and failure variants). It must never be deployed as an identity
+provider. Local supply-chain signing keys are ephemeral and dry-run-only;
+promotion requires CI keyless signing or an approved release identity.

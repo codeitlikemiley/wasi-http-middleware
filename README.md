@@ -1,80 +1,78 @@
 # WASI HTTP Middleware
 
-Reusable, streaming-safe HTTP middleware components for WASIp3 services. The
-components implement the standard `wasi:http/middleware` world and can wrap any
-compatible terminal service; they are not tied to Spin, Wasmtime, Leptos, or a
-particular guest language.
+Framework-neutral, streaming-safe HTTP middleware components for the final
+`wasi:http/middleware@0.3.0` contract. They can wrap any matching terminal
+service and do not depend on Spin SDK, Leptos, or an application framework.
 
-> **Alpha:** `0.1.0-alpha.1` targets
-> `wasi:http@0.3.0-rc-2026-03-15`. Spin middleware composition is pinned to a
-> post-release vNext revision. Do not describe this repository as stable until
-> the promotion gates in [RELEASE.md](docs/RELEASE.md) pass.
+> **Alpha:** `0.2.0-alpha.1` targets final WASI 0.3 with Wasmtime 46.0.1.
+> Current Spin hosts do not yet link final `wasi:http@0.3.0`; their lanes are
+> explicit expected-incompatibility canaries, not runtime support claims.
 
 ## Components
 
-The default order is outermost to innermost:
+The reusable chain is outermost to innermost:
 
 ```text
-request-id -> security-headers -> cors -> auth-policy -> application
+request-id -> security-headers -> cors -> authn-policy -> application
 ```
 
-- `request-id` validates or generates `x-request-id` and returns the canonical
-  value on the response.
-- `security-headers` replaces unsafe values with `X-Content-Type-Options:
-  nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`.
-- `cors` enforces an explicit origin, method, header, and credential policy and
-  short-circuits valid preflight requests before authentication.
-- `auth-policy` strips client-supplied `x-wasi-auth-*` values, calls a policy
-  service, fails closed, and inserts validated identity metadata.
+- `request-id` validates or replaces `x-request-id` and returns it.
+- `security-headers` applies `nosniff` and a conservative referrer policy.
+- `cors` uses exact allowlists and completes preflight before authentication.
+- `authn-policy` calls a credential-verification broker, fails closed, strips
+  credentials and spoofed metadata, and injects one bounded versioned context.
+- `secure-defaults` fuses the same four policies into one component. Golden
+  Wasmtime tests require its responses to match the separate chain.
 
-`passthrough` is a conformance-only component used to prove composition and
-stream forwarding. It is not a release artifact.
+The trusted `x-wasi-auth-context` header is request-only. Every authentication
+component removes all `x-wasi-auth-*` response fields before returning to a
+client. Resource/domain authorization stays in the application—for example,
+Leptos `ServerFn::middlewares()`—and never receives the original credential.
 
-## Build and inspect
+## Build and verify
 
-Install the Rust toolchain and tools pinned in `compatibility.toml`, then run:
+Install the exact tools in `compatibility.toml`, then run:
 
 ```bash
 bash scripts/build-components.sh
 bash scripts/check-component-contracts.sh
+bash scripts/run-wasmtime-e2e.sh
+bash scripts/run-wasmtime-secure-defaults-e2e.sh
+bash scripts/compare-wasmtime-profiles.sh
 bash scripts/generate-checksums.sh
 bash scripts/generate-sbom.sh
 ```
 
-To precompose the chain for Wasmtime:
+Compose either distribution shape:
 
 ```bash
-bash scripts/compose-wasmtime.sh \
-  artifacts/test-components/echo-service.wasm
+bash scripts/compose-wasmtime.sh artifacts/test-components/echo-service.wasm
+bash scripts/compose-secure-defaults.sh artifacts/test-components/echo-service.wasm
 ```
 
-The runtime tests use the deterministic echo and policy fixtures:
+Spin lanes prove the current incompatibility remains understood:
 
 ```bash
-bash scripts/run-wasmtime-e2e.sh
-SPIN_BIN=/path/to/pinned/spin bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=native-middleware \
+  SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
 ```
 
-The Spin runner exits with status 77 and a `SKIP` message only when the exact
-pinned vNext binary is unavailable. Missing fixtures, invalid manifests, failed
-requests, and ABI mismatches are errors.
+Both commands succeed only when Spin fails for the pinned final-WIT linker or
+RC-middleware mismatch. They must be replaced by behavioral E2E when Spin ships
+matching final WASI 0.3 host bindings.
 
-Two committed Spin projects demonstrate artifact reuse and per-project policy:
-
-- `fixtures/spin/full-chain` uses the complete authenticated chain.
-- `fixtures/spin/public-stack` reuses request-ID, security-header, and CORS
-  artifacts with an independent origin policy.
-
-Performance and endurance runners are also local and deterministic:
+Security and release evidence:
 
 ```bash
-bash scripts/benchmark-components.sh
+CARGO_FUZZ_BIN=/path/to/cargo-fuzz bash scripts/run-fuzz-smoke.sh
+bash scripts/dry-run-supply-chain.sh
 HOST=wasmtime bash scripts/soak-runtime.sh
-HOST=spin SPIN_BIN=/path/to/pinned/spin bash scripts/soak-runtime.sh
 ```
 
-The benchmark intentionally exits nonzero when the five-percent promotion
-budget is missed; the alpha does not hide a failing measurement.
+The supply-chain dry run creates a local OCI layout, deterministic provenance,
+and ephemeral-key signatures for both provenance and the OCI manifest. It
+never pushes, tags, publishes, or retains the private key.
 
 ## Documentation
 
@@ -82,15 +80,13 @@ budget is missed; the alpha does not hide a failing measurement.
 - [Configuration](docs/CONFIGURATION.md)
 - [Trust boundary](docs/TRUST-BOUNDARY.md)
 - [Support matrix](docs/SUPPORT.md)
-- [Performance and soak evidence](docs/PERFORMANCE.md)
+- [Performance](docs/PERFORMANCE.md)
 - [Release process](docs/RELEASE.md)
 - [Security policy](SECURITY.md)
 
-`wasm32-wasip2` is the Rust compilation target used to produce a component. It
-does not mean these components support the synchronous WASI Preview 2 HTTP
-handler contract; their public ABI is the pinned asynchronous WASIp3 world.
+`wasm32-wasip2` is the Rust compilation target used to emit components; the
+public HTTP ABI is asynchronous WASI 0.3, not Preview 2 HTTP.
 
 ## License
 
-Licensed under either the Apache License, Version 2.0 or the MIT License, at
-your option.
+Apache-2.0 or MIT, at your option.

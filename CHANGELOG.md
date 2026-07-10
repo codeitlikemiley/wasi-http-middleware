@@ -1,34 +1,46 @@
 # Changelog
 
-All notable changes to this project are documented here.
+All notable changes are documented here.
 
 ## [Unreleased]
 
-## [0.1.0-alpha.1] - 2026-07-10
+## [0.2.0-alpha.1] - 2026-07-10
+
+### Breaking
+
+- Migrated every component from the March RC to final `wasi:http@0.3.0`.
+- Replaced `auth-policy` and legacy identity headers with strict
+  `authn-policy` and bounded `AuthContextV1` in `x-wasi-auth-context`.
+- Renamed the deterministic policy fixture to `mock-authn-broker`.
 
 ### Added
 
-- Framework-neutral request-ID, security-header, CORS, and fail-closed external
-  authentication middleware for the pinned WASIp3 March 2026 RC.
-- Strict policy-path normalization, trusted identity metadata, a two-second
-  default elapsed/transport budget, and a 64 KiB policy-response limit.
-- Deterministic Wasmtime precomposition and two reusable Spin vNext projects
-  with fine-grained capability inheritance.
-- Exact ABI/import audits, negative manifest tests, checksums, CycloneDX SBOMs,
-  expanded HTTP/stream/disconnect/concurrency contracts, browser integration,
-  and scheduled 100-concurrency endurance gates.
+- Required/optional authentication, immutable service/audience binding,
+  HTTPS/Spin-internal/dev-loopback URL policy, RFC 6750 challenges, one total
+  deadline, cancellation-safe bounded admission, and strict broker schemas.
+- A fused `secure-defaults` component with golden parity against the separate
+  request-ID/security/CORS/authn chain.
+- ACR, AMR, issuer-scoped actor identity, roles, scopes, tenant/session claims,
+  decision ID, and policy revision in the versioned context.
+- Wasmtime 46 behavioral suites, fuzz targets, final-WIT contract reports,
+  deterministic SBOM/checksum evidence, local OCI layout, provenance, and
+  ephemeral signature dry runs.
+
+### Fixed
+
+- Relayed forwarded request/response transmission results to prevent stacked
+  middleware from canceling a producer and intermittently losing the first
+  frame before a terminal stream error.
+- Removed credentials/spoofed metadata before downstream invocation and removed
+  all trusted authentication metadata from client responses.
 
 ### Compatibility
 
-- Rust 1.93.0, Wasmtime 45.0.0, `wasm-tools` 1.248.0, WAC 0.10.1, Spin runtime
-  `27451471...`, and Spin SDK `14e675aa...` are pinned in
-  `compatibility.toml`.
-- Stable Spin, WASIp2 middleware, WebSockets, and non-HTTP trigger adapters are
-  not supported by this alpha.
+- Wasmtime 46.0.1 is the only passing behavioral host in this alpha.
+- Spin 4.0.0 lacks final-WASI resources and the pinned middleware revision is
+  RC-only; both are explicit expected-incompatibility canaries.
 
-### Known promotion blocker
+## [0.1.0-alpha.1] - 2026-07-10
 
-- The raw pass-through, request-ID, and security-header Wasmtime
-  microbenchmarks exceed the five-percent overhead budget. The alpha records
-  the measurements and keeps the benchmark canary non-blocking; a stable
-  release cannot waive this gate.
+- Initial March-2026-RC request-ID, security-header, CORS, and external-policy
+  middleware prototype.

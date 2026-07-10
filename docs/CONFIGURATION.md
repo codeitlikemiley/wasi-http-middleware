@@ -1,117 +1,117 @@
 # Configuration
 
-Configuration is loaded once per component instance. Duplicate environment
-keys, malformed values, and missing required values cause a deterministic
-configuration error. Component instances must not be reused across tenants
-with different configuration.
+Configuration is loaded once per component instance. Duplicate keys, missing
+required values, or invalid bounds produce a controlled generic 503. Do not
+reuse one instance across tenants with different policy.
 
-## Request ID
+## Request ID and security headers
 
 `request-id` has no configuration. It accepts exactly one non-empty
-`x-request-id` containing at most 128 characters from
-`A-Z a-z 0-9 - _ . : /`. Missing, duplicate, or invalid values are replaced
-with a random 128-bit lowercase hexadecimal ID.
+`x-request-id`, at most 128 characters from `A-Z a-z 0-9 - _ . : /`; all other
+forms are replaced with a random 128-bit lowercase hexadecimal ID.
 
-## Security headers
-
-`security-headers` has no configuration. It replaces these response fields:
+`security-headers` has no configuration and sets:
 
 | Header | Value |
 |---|---|
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 
-CSP and HSTS are deliberately absent. CSP must reflect the application's
-script/nonces and split-Wasm behavior. HSTS belongs at the TLS-terminating
-boundary.
+CSP is application-specific, especially for islands/split Wasm. HSTS belongs
+at the TLS terminator.
 
 ## CORS
 
-| Variable | Required | Default | Meaning |
+| Variable | Required | Default |
+|---|---:|---|
+| `WASI_MIDDLEWARE_CORS_ORIGINS` | yes | none |
+| `WASI_MIDDLEWARE_CORS_METHODS` | no | `GET,HEAD,POST` |
+| `WASI_MIDDLEWARE_CORS_HEADERS` | no | `content-type,authorization` |
+| `WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS` | no | `false` |
+
+Origins are exact serialized `http`/`https` origins (or explicit `null`). `*`
+cannot be combined with credentials. A valid preflight returns 204 before
+authentication. Origin-dependent responses include `Vary: Origin` without
+discarding existing Vary tokens.
+
+## Authentication broker
+
+| Variable | Required | Default | Constraint |
 |---|---:|---|---|
-| `WASI_MIDDLEWARE_CORS_ORIGINS` | yes | none | Comma-separated exact origins, or `*` without credentials |
-| `WASI_MIDDLEWARE_CORS_METHODS` | no | `GET,HEAD,POST` | Comma-separated allowed request methods |
-| `WASI_MIDDLEWARE_CORS_HEADERS` | no | `content-type,authorization` | Comma-separated allowed request headers |
-| `WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS` | no | `false` | Exactly `true` or `false` |
+| `WASI_MIDDLEWARE_AUTHN_BROKER_URL` | yes | none | HTTPS; Spin-internal HTTP exception; explicit loopback development exception |
+| `WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS` | no | `2000` | `1..=60000` |
+| `WASI_MIDDLEWARE_AUTHN_MODE` | no | `required` | `required` or `optional` |
+| `WASI_MIDDLEWARE_SERVICE_ID` | yes | none | bounded realm-safe token |
+| `WASI_MIDDLEWARE_AUTHN_AUDIENCES` | yes | none | comma-separated; must contain service ID |
+| `WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT` | no | `64` | `1..=1024` |
+| `WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK` | no | `false` | exactly `true` or `false` |
 
-An empty origin set is invalid. `*` combined with credentials is invalid.
-Unknown origins, methods, or requested headers receive 403. A valid `OPTIONS`
-request with `Access-Control-Request-Method` receives 204 without invoking
-authentication or the terminal service. Origin-dependent successes and
-rejections include `Vary: Origin`. Exact origins must be serialized `http` or
-`https` origins without user information, a path, query, or fragment. The
-special `null` origin can be allowed explicitly. Non-CORS requests pass
-through.
+Plain HTTP is rejected except for one-label `<service>.spin.internal` names or
+an IP/`localhost` loopback URL when the explicit development flag is true.
+User information, ambiguous suffixes, and remote HTTP are rejected.
 
-Example:
+Optional mode skips the broker only when `Authorization` is absent. A supplied
+credential is always verified and is never downgraded to anonymous access.
+Broker URL, service ID, and audiences remain required in both modes.
 
-```text
-WASI_MIDDLEWARE_CORS_ORIGINS=https://app.example,https://admin.example
-WASI_MIDDLEWARE_CORS_METHODS=GET,HEAD,POST
-WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization,x-request-id
-WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=true
-```
-
-## Authentication policy
-
-| Variable | Required | Default | Meaning |
-|---|---:|---|---|
-| `WASI_MIDDLEWARE_POLICY_URL` | yes | none | Absolute `http` or `https` policy endpoint, at most 2048 bytes |
-| `WASI_MIDDLEWARE_POLICY_TIMEOUT_MS` | no | `2000` | Policy elapsed-time budget and transport timeout; range `1..=60000` |
-
-The policy request is `POST application/json` and contains only:
+The broker request is `POST application/json` with the credential only in its
+`Authorization` header. Its strict JSON body is:
 
 ```json
 {
-  "method": "GET",
-  "scheme": "https",
-  "authority": "app.example",
-  "path": "/account",
+  "version": 1,
+  "service_id": "orders-api",
+  "audiences": ["orders-api"],
   "request_id": "..."
 }
 ```
 
-The original `Authorization` value is forwarded as a header. Bodies, cookies,
-and query strings are not sent. Before dispatch, the path is decoded exactly
-once and the query is removed. Encoded separators, backslashes, controls,
-double encoding, empty segments, and `.` or `..` segments are rejected with
-400 rather than allowing the policy service and terminal router to disagree.
-A literal dot inside a larger filename remains valid. A 200 response must
-contain:
+Method, scheme, authority, route/path, query, cookies, and body are deliberately
+absent. Authentication establishes identity; route/resource authorization
+belongs later in the application.
+
+A 200 response must use the strict V1 schema. Unknown fields, invalid bounds,
+or inconsistent claims fail closed:
 
 ```json
 {
+  "version": 1,
+  "issuer": "https://issuer.example",
   "subject": "user-1",
-  "issuer": "identity.example",
-  "scopes": ["read", "write"]
+  "tenant_id": "tenant-1",
+  "roles": ["member"],
+  "scopes": ["read"],
+  "acr": "urn:example:loa:2",
+  "amr": ["pwd"],
+  "actor": {"issuer": "workload.example", "subject": "job-1"},
+  "auth_time": 1700000000,
+  "expires_at": 1700003600,
+  "session_id": "session-1",
+  "decision_id": "decision-1",
+  "policy_revision": "r7"
 }
 ```
 
-Policy status 401 becomes 401, and 403 becomes 403. Network failures, timeout,
-oversized or malformed success bodies, unexpected status codes, and invalid
-identity values become a generic 503. Duplicate or invalid authorization
-fields are rejected before the policy call.
+Only issuer, subject, decision ID, and policy revision are mandatory success
+fields. Actor identity is also an `(issuer, subject)` pair. Roles, scopes, AMR,
+and audiences are bounded, sorted, and de-duplicated before encoding.
 
-The component checks monotonic elapsed time after response headers and every
-body frame. Host transport timeouts bound connect, first-byte, and between-byte
-waits, while the elapsed check prevents a provider from extending the call by
-dripping frames. Over-budget data is discarded and becomes 503. Deployment
-deadlines remain necessary as the outermost bound.
+Broker 401/403 map to RFC 6750 challenges. Network error, saturation, timeout,
+unexpected status, malformed JSON, or oversized response maps to generic 503
+with `Retry-After: 1`. One monotonic deadline races connect, response headers,
+each body frame, and cancellation; irrelevant broker trailers are dropped.
 
-## Spin inheritance
+## Trusted context
 
-Spin middleware reads configuration inherited from the primary component.
-Use the smallest list supported by the pinned vNext runtime:
+On pass, middleware removes `Authorization` and every inbound
+`x-wasi-auth-*` field, then inserts exactly one `x-wasi-auth-context`. The value
+is bounded canonical base64url-without-padding JSON, version 1. Anonymous
+contexts contain no principal/decision. Authenticated contexts bind immutable
+service/audiences to validated broker claims. Every response removes the
+reserved prefix so the context never becomes browser-visible.
 
-```toml
-dependencies.middleware = [
-  { component = "request-id" },
-  { component = "security-headers" },
-  { component = "cors", inherit_configuration = ["environment"] },
-  { component = "auth-policy", inherit_configuration = ["environment", "allowed_outbound_hosts"] },
-]
-```
+## Fused component
 
-The primary component must declare the environment values and exact policy
-host in `allowed_outbound_hosts`. See the capability caveat in
-[TRUST-BOUNDARY.md](TRUST-BOUNDARY.md).
+`secure-defaults` consumes the same CORS and authentication environment. CORS
+is initialized/evaluated first, so valid preflight never depends on broker
+availability. Golden tests compare it with the four-component chain.

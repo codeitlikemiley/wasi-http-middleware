@@ -2,14 +2,11 @@
 
 ## Compatibility lock
 
-`compatibility.toml` is the release source of truth. Blocking CI must use the
-exact Rust, WIT, `wasip3`, `wit-bindgen`, Spin revision, Wasmtime, `wasm-tools`,
-and WAC versions recorded there. A non-blocking canary may follow upstream
-heads, but it cannot replace the pinned lane.
-
-Changing the WIT package version requires rebuilding every component and
-terminal fixture, regenerating ABI reports, rerunning both runtime suites, and
-reviewing compatibility as a release-level change.
+`compatibility.toml` pins Rust, final WIT, `wasip3`, `wit-bindgen`, Wasmtime,
+`wasm-tools`, WAC, Spin canaries, fuzzing, and supply-chain tools. A release
+changes the file and workspace package version together. WIT changes require
+rebuilding every component, regenerating reports/SBOMs/checksums, and rerunning
+all behavioral and incompatibility gates.
 
 ## Required gates
 
@@ -25,60 +22,56 @@ cargo deny check
 bash scripts/build-components.sh
 bash scripts/check-component-contracts.sh
 bash scripts/run-wasmtime-e2e.sh
-SPIN_BIN=/path/to/the-pinned-spin bash scripts/run-spin-e2e.sh
+bash scripts/run-wasmtime-secure-defaults-e2e.sh
+bash scripts/compare-wasmtime-profiles.sh
+SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
+CARGO_FUZZ_BIN=/path/to/cargo-fuzz bash scripts/run-fuzz-smoke.sh
 bash scripts/generate-checksums.sh
 bash scripts/generate-sbom.sh
+bash scripts/dry-run-supply-chain.sh
 HOST=wasmtime bash scripts/soak-runtime.sh
-HOST=spin SPIN_BIN=/path/to/the-pinned-spin bash scripts/soak-runtime.sh
 ```
 
-`check-component-contracts.sh` validates with
-`--features component-model,cm-async`, records the generated WIT, requires one
-imported and one exported pinned HTTP handler, compares all imports with exact
-allowlists, runs negative deployment-audit cases, and checks two reusable Spin
-projects for artifact and configuration isolation.
+The Spin command is an expected-incompatibility canary. A successful Spin host
+startup fails the canary until the repository replaces it with behavioral E2E.
+The pinned native-middleware commit runs separately with
+`SPIN_COMPAT_PROFILE=native-middleware`.
 
-Wasmtime 45 must be started with `-W component-model-async=y -S p3=y`; enabling
-generic WASI HTTP without the P3 host implementation does not satisfy the
-resource types in this release candidate.
+Component contracts validate async component-model encoding, exact imports,
+one handler import/export, forbidden capabilities, deterministic WIT reports,
+fixture isolation, and negative manifest audit cases. The two Wasmtime profiles
+must also match golden status/header/body signatures, including CORS failure and
+terminal stream errors.
 
-WAC 0.10.1 is the minimum pinned composer. WAC 0.8.0 cannot decode this async
-component shape and fails before composition; that older version is not a
-supported fallback.
+## Artifact set
 
-`benchmark-components.sh` records the unwrapped, pass-through, request-ID, and
-security-header microbenchmarks. It remains a non-blocking alpha canary because
-the pinned Wasmtime tuple does not yet meet the five-percent raw echo-service
-budget; see [PERFORMANCE.md](PERFORMANCE.md). It becomes blocking before a
-stable release.
-
-## Alpha artifacts
-
-The release directory contains:
+Production components:
 
 ```text
-artifacts/components/auth-policy.wasm
-artifacts/components/cors.wasm
 artifacts/components/request-id.wasm
 artifacts/components/security-headers.wasm
-artifacts/SHA256SUMS
-artifacts/sbom/*.cdx.json
-reports/wit/*.wit
+artifacts/components/cors.wasm
+artifacts/components/authn-policy.wasm
+artifacts/components/secure-defaults.wasm
 ```
 
-The pass-through component, test components, and composed E2E binaries are not
-release artifacts. Review the WIT reports and SBOMs before signing. Publishing,
-pushing, tagging, and creating a remote are separate operator actions and are
-intentionally absent from the scripts.
+`artifacts/SHA256SUMS` also pins conformance/test components so integration
+fixtures cannot silently drift. Deterministic CycloneDX files live under
+`artifacts/sbom/`; exact component WIT lives under `reports/wit/`.
+
+`dry-run-supply-chain.sh` builds a local OCI layout, creates deterministic
+in-toto/SLSA-shaped provenance, generates an ephemeral local key, and signs and
+verifies both provenance and the fetched OCI manifest. It performs no registry
+push and deletes the private key. Promotion must replace the ephemeral key with
+CI keyless signing or an approved release identity.
+
+After the final version commit, regenerate all checksums, SBOMs, WIT reports,
+and provenance because package versions and source revision are embedded.
+Push, tag, registry upload, crates.io publication, and GitHub release creation
+remain separate operator actions.
 
 ## Stable promotion
 
-Do not remove the alpha suffix until a stable Spin and SDK release implements
-the same middleware contract and WIT version, all Git-head dependencies are
-gone, runtime/browser/security/performance tests pass, a ten-minute
-100-concurrency soak reaches a stable memory plateau, and the produced Wasm
-artifacts have checksums, SBOMs, signatures, and provenance.
-
-Until then, a Spin E2E exit status of 77 means only that the exact pinned vNext
-binary was unavailable. Release CI must provide that binary; it must not treat
-77 as success.
+Do not remove the alpha suffix until claimed hosts implement the same final WIT,
+performance/soak gates are blocking and green, identity/security review is
+complete, and signed release provenance is verifiable without insecure flags.
