@@ -437,6 +437,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasi-http-middleware-secure-defaults"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "http",
+ "thiserror",
+ "wasi-http-authn-runtime",
+ "wasi-http-metadata",
+ "wasi-http-middleware-component-support",
+ "wasi-http-policy-core",
+ "wasip3",
+ "wit-bindgen 0.59.0",
+]
+
+[[package]]
 name = "wasi-http-middleware-security-headers"
 version = "0.1.0-alpha.1"
 dependencies = [

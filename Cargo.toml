@@ -6,6 +6,7 @@ members = [
     "components/request-id",
     "components/security-headers",
     "components/cors",
+    "components/secure-defaults",
     "test-components/echo-service",
     "test-components/mock-authn-broker",
 ]

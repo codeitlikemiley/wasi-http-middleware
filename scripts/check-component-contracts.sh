@@ -66,7 +66,7 @@ check_component_capabilities() {
                 fail_contract "${component}" "must not import outbound HTTP"
             fi
             ;;
-        authn-policy)
+        authn-policy|secure-defaults)
             grep -Fqx "  import ${environment};" "${report}" \
                 || fail_contract "${component}" "must import environment configuration"
             grep -Fqx "  import ${client};" "${report}" \
@@ -135,7 +135,7 @@ wasi:io/streams@0.2.6
 wasi:random/insecure-seed@0.2.6
 EOF
             ;;
-        authn-policy)
+        authn-policy|secure-defaults)
             cat >"${expected}" <<EOF
 wasi:cli/environment@0.2.6
 wasi:cli/environment@${wasi_http_version}

@@ -22,8 +22,21 @@ if [[ -n "${E2E_COMPOSED_COMPONENT:-}" ]]; then
     composed="${E2E_COMPOSED_COMPONENT}"
     require_file "${composed}"
 else
-    composed="${ARTIFACT_ROOT}/composed/e2e-full-chain.wasm"
-    bash "${REPO_ROOT}/scripts/compose-wasmtime.sh" "${echo_component}" "${composed}"
+    profile="${E2E_MIDDLEWARE_PROFILE:-chain}"
+    case "${profile}" in
+        chain)
+            composed="${ARTIFACT_ROOT}/composed/e2e-full-chain.wasm"
+            bash "${REPO_ROOT}/scripts/compose-wasmtime.sh" "${echo_component}" "${composed}"
+            ;;
+        secure-defaults)
+            composed="${ARTIFACT_ROOT}/composed/e2e-secure-defaults.wasm"
+            bash "${REPO_ROOT}/scripts/compose-secure-defaults.sh" "${echo_component}" "${composed}"
+            ;;
+        *)
+            echo "error: unknown E2E_MIDDLEWARE_PROFILE: ${profile}" >&2
+            exit 1
+            ;;
+    esac
 fi
 
 temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/wasi-http-wasmtime.XXXXXX")"

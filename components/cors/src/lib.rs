@@ -47,10 +47,12 @@ bindings::export!(Component with_types_in bindings);
 
 impl bindings::exports::wasi::http::handler::Guest for Component {
     async fn handle(request: Request) -> Result<Response, ErrorCode> {
-        let config = CONFIG
+        let Ok(config) = CONFIG
             .get_or_init(|| load_config(&get_environment()))
             .as_ref()
-            .map_err(|_| ErrorCode::ConfigurationError)?;
+        else {
+            return empty_response(503, vec![("retry-after".to_owned(), b"1".to_vec())]);
+        };
         let headers = request_headers(&request);
         let Ok(header_map) = to_header_map(&headers) else {
             return empty_response(400, Vec::new());

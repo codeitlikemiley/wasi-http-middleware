@@ -8,7 +8,7 @@ COMPONENT_ARTIFACT_DIR="${ARTIFACT_ROOT}/components"
 TEST_COMPONENT_ARTIFACT_DIR="${ARTIFACT_ROOT}/test-components"
 REPORT_ROOT="${REPORT_ROOT:-${REPO_ROOT}/reports}"
 
-COMPONENTS=(request-id security-headers cors authn-policy)
+COMPONENTS=(request-id security-headers cors authn-policy secure-defaults)
 CONFORMANCE_COMPONENTS=(passthrough)
 TEST_COMPONENTS=(echo-service mock-authn-broker)
 
