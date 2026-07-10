@@ -8,7 +8,10 @@ reuse one instance across tenants with different policy.
 
 `request-id` has no configuration. It accepts exactly one non-empty
 `x-request-id`, at most 128 characters from `A-Z a-z 0-9 - _ . : /`; all other
-forms are replaced with a random 128-bit lowercase hexadecimal ID.
+forms are replaced with a 48-character lowercase hexadecimal ID. Each
+component instance obtains one random 128-bit prefix, then appends a monotonic
+64-bit sequence. The value is unique within that instance until the sequence
+wraps and is a correlation identifier, never a credential.
 
 `security-headers` has no configuration and sets:
 
@@ -42,7 +45,7 @@ discarding existing Vary tokens.
 | `WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS` | no | `2000` | `1..=60000` |
 | `WASI_MIDDLEWARE_AUTHN_MODE` | no | `required` | `required` or `optional` |
 | `WASI_MIDDLEWARE_SERVICE_ID` | yes | none | bounded realm-safe token |
-| `WASI_MIDDLEWARE_AUTHN_AUDIENCES` | yes | none | comma-separated; must contain service ID |
+| `WASI_MIDDLEWARE_AUTHN_AUDIENCES` | yes | none | non-empty bounded comma-separated OAuth resource identifiers |
 | `WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT` | no | `64` | `1..=1024` |
 | `WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK` | no | `false` | exactly `true` or `false` |
 
@@ -99,10 +102,13 @@ Only issuer, subject, decision ID, and policy revision are mandatory success
 fields. Actor identity is also an `(issuer, subject)` pair. Roles, scopes, AMR,
 and audiences are bounded, sorted, and de-duplicated before encoding.
 
-Broker 401/403 map to RFC 6750 challenges. Network error, saturation, timeout,
-unexpected status, malformed JSON, or oversized response maps to generic 503
-with `Retry-After: 1`. One monotonic deadline races connect, response headers,
-each body frame, and cancellation; irrelevant broker trailers are dropped.
+Broker 401 maps to an invalid-credential RFC 6750 challenge. A broker 403 is
+not accepted as domain authorization evidence and therefore maps, along with
+network error, saturation, timeout, unexpected status, malformed JSON, or an
+oversized response, to generic 503 with `Retry-After: 1`. RBAC, ABAC, and ReBAC
+denials belong to the downstream authorization boundary. One monotonic deadline
+races connect, response headers, each body frame, and cancellation; irrelevant
+broker trailers are dropped.
 
 ## Trusted context
 
@@ -112,6 +118,12 @@ is bounded canonical base64url-without-padding JSON, version 1. Anonymous
 contexts contain no principal/decision. Authenticated contexts bind immutable
 service/audiences to validated broker claims. Every response removes the
 reserved prefix so the context never becomes browser-visible.
+
+The encoded context and converted Authorization, cookie, and reserved trusted
+metadata header values are marked sensitive in Rust header maps. Public
+identity/context types use redacted `Debug` implementations. These safe
+defaults reduce accidental diagnostic disclosure; they do not authorize code
+to log header accessors or decoded identity fields.
 
 ## Fused component
 

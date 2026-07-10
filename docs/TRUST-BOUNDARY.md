@@ -33,7 +33,9 @@ credential itself and immutable deployment/request IDs.
 - Duplicate/oversized/malformed Authorization returns 400 without a broker call.
 - Missing credentials return 401 in required mode or anonymous context in
   optional mode.
-- Supplied invalid credentials return 401/403; optional mode never fails open.
+- Supplied invalid credentials return 401; optional mode never fails open.
+- Broker 403 and every non-authentication status fail closed as generic 503;
+  domain 403 decisions belong to a separate authorization provider.
 - Broker failure, deadline, saturation, malformed success, or unknown status is
   503.
 - Body-result errors propagate after already-delivered frames; middleware does
@@ -46,7 +48,14 @@ session IDs, or context headers. A request ID is loggable only after canonical
 validation. Safe telemetry includes status, duration, byte counts, middleware
 class, and coarse error class.
 
-The mock broker uses deterministic test tokens (`Bearer allow`, `deny`,
-`error`, and failure variants). It must never be deployed as an identity
+Canonical context values and sensitive inbound header values carry Rust's
+`HeaderValue::is_sensitive` marker, and public authentication identity types
+redact their `Debug` output. Treat these as defense in depth: application code
+must still avoid logging decoded accessors and must configure host/proxy logs
+to exclude request secrets.
+
+The mock broker uses deterministic test tokens (`Bearer allow`, `readonly`,
+`lowacr`, `no-relation`, `deny`, `error`, and failure variants). It must never
+be deployed as an identity
 provider. Local supply-chain signing keys are ephemeral and dry-run-only;
 promotion requires CI keyless signing or an approved release identity.

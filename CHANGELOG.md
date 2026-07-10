@@ -4,6 +4,19 @@ All notable changes are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Marked canonical authentication contexts, Authorization, cookies, and
+  reserved trusted metadata as sensitive header values, and redacted public
+  identity/authentication `Debug` implementations.
+
+### Performance
+
+- Reused a per-instance random request-ID prefix with a monotonic sequence,
+  cached the deterministic anonymous authentication context, moved environment
+  reads behind one-time initialization, and removed redundant header
+  conversions while preserving immutable WASI resource lifecycles.
+
 ## [0.2.0-alpha.1] - 2026-07-10
 
 ### Breaking

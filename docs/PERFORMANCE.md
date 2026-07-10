@@ -31,6 +31,26 @@ against its realistic SSR/server-function/static workload. The fused
 percent versus that same workload unwrapped. Stable promotion remains blocked
 if either realistic measurement misses.
 
+The 2026-07-10 five-pair, 30-second, concurrency-100 representative run first
+measured an unwrapped Leptos service against the fused component. After the
+component was changed to parse only policy-relevant fields and apply exact
+edits directly to one cloned WASI header resource, the repeated gate still
+failed with zero request errors:
+
+| Metric | Unwrapped median | Fused median | Change | Budget |
+|---|---:|---:|---:|---:|
+| First-byte p99 | 7.961 ms | 12.527 ms | +57.36% | <= +10% |
+| Total p99 | 8.934 ms | 13.578 ms | +51.98% | <= +10% |
+| Throughput | 32,131.58 requests/s | 22,787.77 requests/s | -29.08% | >= -10% |
+
+A separate realistic pass-through control stayed inside the same budget:
+throughput -1.62%, first-byte p99 -5.65%, and total p99 -8.85%. The current
+promotion blocker is therefore not the component boundary alone. It is the
+immutable request and response header reconstruction plus transmission-result
+bridging needed to inject trusted request metadata and mandatory response
+headers without losing bodies, trailers, cancellation, or post-commit errors.
+The threshold remains unchanged and the release remains alpha.
+
 `soak-runtime.sh` runs the complete authenticated chain with a default ten
 minutes, 100 concurrent clients, and 100 requests per second. It rejects client
 errors, unexpected statuses, sensitive log values, and sustained second-half
