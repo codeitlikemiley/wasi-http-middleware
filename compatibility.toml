@@ -1,0 +1,17 @@
+[compatibility]
+rust = "1.93.0"
+wasi_http = "0.3.0-rc-2026-03-15"
+wasip3 = "0.6.0+wasi-0.3.0-rc-2026-03-15"
+wit_bindgen = "0.57.1"
+spin_runtime_revision = "27451471b8ba0faeffa01c5a4ddd6daee9a9d526"
+spin_sdk_revision = "14e675aa877c2dd4040c631421dfdaf5d526fb40"
+wasmtime = "45.0.0"
+wasm_tools = "1.248.0"
+wac = "0.8.0"
+leptos_wasi = "0.4.0"
+
+[release]
+channel = "alpha"
+stable_spin_required = true
+publish = false
+
