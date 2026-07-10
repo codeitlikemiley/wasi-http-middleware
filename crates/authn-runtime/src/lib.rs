@@ -373,25 +373,28 @@ async fn call_broker(
 ) -> Result<AuthDecision, BrokerCallError> {
     let started = monotonic_clock::now();
     let body = serde_json::to_vec(broker_request).map_err(|_| BrokerCallError::Serialization)?;
-    let response = with_deadline(
+    let (status, body) = with_deadline(
         started,
         config.timeout_ns,
-        send_broker_http_request(config, body, authorization, &broker_request.request_id),
+        exchange_with_broker(
+            config,
+            body,
+            authorization,
+            &broker_request.request_id,
+            started,
+        ),
     )
-    .await?
-    .map_err(|_| BrokerCallError::Transport)?;
-    let status = StatusCode::from_u16(response.get_status_code())
-        .map_err(|_| BrokerCallError::InvalidStatus)?;
-    let body = collect_broker_response(response, started, config.timeout_ns).await?;
+    .await??;
     Ok(parse_authn_response(status, &body))
 }
 
-async fn send_broker_http_request(
+async fn exchange_with_broker(
     config: &AuthnConfig,
     body: Vec<u8>,
     authorization: &str,
     request_id: &str,
-) -> Result<Response, ErrorCode> {
+    started: u64,
+) -> Result<(StatusCode, Vec<u8>), BrokerCallError> {
     let fields = vec![
         ("accept".to_owned(), b"application/json".to_vec()),
         ("content-type".to_owned(), b"application/json".to_vec()),
@@ -408,8 +411,7 @@ async fn send_broker_http_request(
             authorization.as_bytes().to_vec(),
         ),
     ];
-    let headers =
-        Headers::from_list(&fields).map_err(|_| ErrorCode::HttpRequestHeaderSectionSize(None))?;
+    let headers = Headers::from_list(&fields).map_err(|_| BrokerCallError::Transport)?;
     let (mut body_writer, body_reader) = wit_stream::new();
     let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     let options = RequestOptions::new();
@@ -417,28 +419,48 @@ async fn send_broker_http_request(
         .set_connect_timeout(Some(config.timeout_ns))
         .and_then(|()| options.set_first_byte_timeout(Some(config.timeout_ns)))
         .and_then(|()| options.set_between_bytes_timeout(Some(config.timeout_ns)))
-        .map_err(|_| ErrorCode::ConfigurationError)?;
-    let (request, _transmission_result) =
+        .map_err(|_| BrokerCallError::Transport)?;
+    let (request, transmission_result) =
         Request::new(headers, Some(body_reader), body_result, Some(options));
     request
         .set_method(&Method::Post)
         .and_then(|()| request.set_scheme(Some(&config.scheme)))
         .and_then(|()| request.set_authority(Some(&config.authority)))
         .and_then(|()| request.set_path_with_query(Some(&config.path_with_query)))
-        .map_err(|()| ErrorCode::ConfigurationError)?;
+        .map_err(|()| BrokerCallError::Transport)?;
 
     let write_body = async move {
-        let body_result_writer = body_result_writer;
         let remaining = body_writer.write_all(body).await;
-        let result = if remaining.is_empty() {
+        let body_was_written = remaining.is_empty();
+        drop(body_writer);
+        let result = if body_was_written {
             Ok(None)
         } else {
             Err(ErrorCode::InternalError(None))
         };
-        let _write_result = body_result_writer.write(result).await;
+        let result_was_published = body_result_writer.write(result).await.is_ok();
+        if body_was_written && result_was_published {
+            Ok(())
+        } else {
+            Err(BrokerCallError::Transport)
+        }
     };
-    let (response, ()) = futures::join!(client::send(request), write_body);
-    response
+    let send_and_collect = async move {
+        let response = client::send(request)
+            .await
+            .map_err(|_| BrokerCallError::Transport)?;
+        let status = StatusCode::from_u16(response.get_status_code())
+            .map_err(|_| BrokerCallError::InvalidStatus)?;
+        let body = collect_broker_response(response, started, config.timeout_ns).await?;
+        Ok::<_, BrokerCallError>((status, body))
+    };
+    let await_transmission = async move {
+        transmission_result
+            .await
+            .map_err(|_| BrokerCallError::Transport)
+    };
+    let (response, (), ()) = futures::try_join!(send_and_collect, write_body, await_transmission)?;
+    Ok(response)
 }
 
 async fn collect_broker_response(
@@ -446,8 +468,7 @@ async fn collect_broker_response(
     started: u64,
     timeout_ns: u64,
 ) -> Result<Vec<u8>, BrokerCallError> {
-    let (result_writer, body_result) = wit_future::new(|| Ok(()));
-    drop(result_writer);
+    let (result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     let (mut body, trailers) = Response::consume_body(response, body_result);
     let mut output = Vec::new();
     loop {
@@ -460,7 +481,13 @@ async fn collect_broker_response(
         match status {
             StreamResult::Complete(_) => {}
             StreamResult::Dropped => {
+                // Broker trailers do not participate in authentication and are
+                // deliberately ignored instead of extending the total deadline.
                 drop(trailers);
+                result_writer
+                    .write(Ok(()))
+                    .await
+                    .map_err(|_| BrokerCallError::ResponseBody)?;
                 return Ok(output);
             }
             StreamResult::Cancelled => return Err(BrokerCallError::ResponseBody),
@@ -569,7 +596,7 @@ mod tests {
             (SERVICE_ID.to_owned(), "orders-api".to_owned()),
             (
                 AUTHN_AUDIENCES.to_owned(),
-                "orders-api,orders-read".to_owned(),
+                "api://orders,api://orders-read".to_owned(),
             ),
         ]
     }
@@ -584,7 +611,7 @@ mod tests {
         assert_eq!(config.mode(), AuthnMode::Required);
         assert_eq!(config.max_in_flight(), DEFAULT_MAX_IN_FLIGHT);
         assert_eq!(config.service_id(), "orders-api");
-        assert_eq!(config.audiences(), &["orders-api", "orders-read"]);
+        assert_eq!(config.audiences(), &["api://orders", "api://orders-read"]);
     }
 
     #[test]
@@ -647,7 +674,7 @@ mod tests {
 
         assert_eq!(
             json,
-            r#"{"version":1,"service_id":"orders-api","audiences":["orders-api","orders-read"],"request_id":"request-1"}"#
+            r#"{"version":1,"service_id":"orders-api","audiences":["api://orders","api://orders-read"],"request_id":"request-1"}"#
         );
         for forbidden in [
             "authorization",
@@ -662,16 +689,17 @@ mod tests {
     }
 
     #[test]
-    fn configuration_rejects_service_audience_mismatch() {
+    fn configuration_rejects_an_empty_audience_list() {
         let mut environment = required_environment("https://broker.example/authenticate");
         environment
             .iter_mut()
             .find(|(name, _)| name == AUTHN_AUDIENCES)
             .expect("fixture key")
-            .1 = "other-api".to_owned();
+            .1
+            .clear();
 
         assert_eq!(
-            AuthnConfig::from_environment(&environment).expect_err("mismatch must fail"),
+            AuthnConfig::from_environment(&environment).expect_err("empty audiences must fail"),
             AuthnConfigError::InvalidDeploymentIdentity
         );
     }

@@ -22,6 +22,8 @@ All notable changes are documented here.
   request-ID/security/CORS/authn chain.
 - ACR, AMR, issuer-scoped actor identity, roles, scopes, tenant/session claims,
   decision ID, and policy revision in the versioned context.
+- Distinct immutable terminal service IDs and expected OAuth audiences, such as
+  `orders-api` with `api://orders`.
 - Wasmtime 46 behavioral suites, fuzz targets, final-WIT contract reports,
   deterministic SBOM/checksum evidence, local OCI layout, provenance, and
   ephemeral signature dry runs.
@@ -31,6 +33,9 @@ All notable changes are documented here.
 - Relayed forwarded request/response transmission results to prevent stacked
   middleware from canceling a producer and intermittently losing the first
   frame before a terminal stream error.
+- Closed producers before publishing body results and joined outbound authn
+  request transmission with body production, response collection, fail-fast
+  cancellation, and the one absolute deadline.
 - Removed credentials/spoofed metadata before downstream invocation and removed
   all trusted authentication metadata from client responses.
 

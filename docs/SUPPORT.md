@@ -14,7 +14,7 @@ This matrix describes `0.2.0-alpha.1`; it is not a stable-support promise.
 | Separate four-component chain | Implemented | Request ID, security, CORS, strict authn |
 | Fused `secure-defaults` | Implemented | Golden-equivalent to separate chain on Wasmtime |
 | Request/response streaming | Implemented | No application-body collection |
-| Immediate frame then error | Implemented | Transmission results relayed; repeated stacked regression plus real Leptos gate |
+| Mid-stream frame then error | Implemented | First frame preserved before terminal error; separate immediate-error no-hang gate |
 | Trailers | Forwarded, host-dependent | Attached to body-result future; client exposure depends on host protocol bridge |
 | CORS preflight | Implemented | Exact allowlists; executes before authn |
 | Required/optional authn | Implemented | Optional applies only to absent credentials |

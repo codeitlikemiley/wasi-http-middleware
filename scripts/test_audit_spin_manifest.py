@@ -42,7 +42,7 @@ allowed_outbound_hosts = {host_list}
 [component.app.environment]
 WASI_MIDDLEWARE_AUTHN_BROKER_URL = "{broker_url}"
 WASI_MIDDLEWARE_SERVICE_ID = "app"
-WASI_MIDDLEWARE_AUTHN_AUDIENCES = "app"
+WASI_MIDDLEWARE_AUTHN_AUDIENCES = "api://orders"
 
 [component.request-id]
 source = "request-id.wasm"
@@ -66,6 +66,18 @@ class AuditTests(unittest.TestCase):
 
     def test_accepts_exact_chain_and_broker_host(self) -> None:
         self.assertEqual(self.audit(manifest()), [])
+
+    def test_accepts_distinct_service_and_oauth_audience(self) -> None:
+        self.assertEqual(self.audit(manifest()), [])
+
+    def test_rejects_empty_audience_configuration(self) -> None:
+        errors = self.audit(
+            manifest().replace(
+                'WASI_MIDDLEWARE_AUTHN_AUDIENCES = "api://orders"',
+                'WASI_MIDDLEWARE_AUTHN_AUDIENCES = ""',
+            )
+        )
+        self.assertTrue(any("service/audience configuration" in error for error in errors))
 
     def test_rejects_unwrapped_application(self) -> None:
         self.assertTrue(self.audit(manifest(stack=False)))

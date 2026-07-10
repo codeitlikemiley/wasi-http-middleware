@@ -58,6 +58,7 @@ impl wasip3::exports::http::handler::Guest for Component {
             (_, "/error") => response(500, vec![], None),
             (Method::Get, "/delayed") => delayed_response(),
             (Method::Get, "/failing-stream") => failing_stream_response(),
+            (Method::Get, "/immediate-failure") => immediate_failure_response(),
             (Method::Get, "/trailers") => trailers_response(),
             _ => response(404, vec![], None),
         }
@@ -126,10 +127,14 @@ fn delayed_response() -> Result<Response, ErrorCode> {
         wait_for(300_000_000).await;
         let remaining = writer.write_all(b"second\n".to_vec()).await;
         if remaining.is_empty() {
+            drop(writer);
             let _write_result = body_result_writer.write(Ok(None)).await;
         }
     });
-    let (response, _transmission_result) = Response::new(headers, Some(reader), body_result);
+    let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
+    });
     Ok(response)
 }
 
@@ -142,12 +147,32 @@ fn failing_stream_response() -> Result<Response, ErrorCode> {
     wasip3::spawn(async move {
         let remaining = writer.write_all(b"partial body\n".to_vec()).await;
         if remaining.is_empty() {
+            // Make this an observably mid-stream failure rather than a race
+            // between buffered frame delivery and connection termination.
+            wait_for(50_000_000).await;
+            drop(writer);
             let _write_result = body_result_writer
                 .write(Err(ErrorCode::InternalError(None)))
                 .await;
         }
     });
-    let (response, _transmission_result) = Response::new(headers, Some(reader), body_result);
+    let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
+    });
+    Ok(response)
+}
+
+fn immediate_failure_response() -> Result<Response, ErrorCode> {
+    let fields = vec![("content-type".to_owned(), b"text/plain".to_vec())];
+    let headers =
+        Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
+    drop(body_result_writer);
+    let (response, transmission_result) = Response::new(headers, None, body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
+    });
     Ok(response)
 }
 
@@ -160,10 +185,14 @@ fn trailers_response() -> Result<Response, ErrorCode> {
     wasip3::spawn(async move {
         let remaining = writer.write_all(b"body with trailer\n".to_vec()).await;
         if remaining.is_empty() {
+            drop(writer);
             let _write_result = body_result_writer.write(echo_trailers()).await;
         }
     });
-    let (response, _transmission_result) = Response::new(headers, Some(reader), body_result);
+    let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
+    });
     Ok(response)
 }
 
@@ -176,8 +205,9 @@ fn echo_trailers() -> Result<Option<Headers>, ErrorCode> {
 
 fn echo_body(request: Request) -> Result<Response, ErrorCode> {
     let content_length = request.get_headers().get("content-length");
-    let (_, body_result) = wit_future::new(|| Ok(()));
-    let (body, trailers) = Request::consume_body(request, body_result);
+    let (request_result_writer, request_result) =
+        wit_future::new(|| Err(ErrorCode::InternalError(None)));
+    let (body, trailers) = Request::consume_body(request, request_result);
     let mut fields = vec![(
         "content-type".to_owned(),
         b"application/octet-stream".to_vec(),
@@ -187,7 +217,11 @@ fn echo_body(request: Request) -> Result<Response, ErrorCode> {
     }
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
-    let (response, _transmission_result) = Response::new(headers, Some(body), trailers);
+    let (response, transmission_result) = Response::new(headers, Some(body), trailers);
+    wasip3::spawn(async move {
+        let result = transmission_result.await;
+        let _write_result = request_result_writer.write(result).await;
+    });
     Ok(response)
 }
 
@@ -213,6 +247,7 @@ fn response(
         wasip3::spawn(async move {
             let remaining = writer.write_all(body).await;
             if remaining.is_empty() {
+                drop(writer);
                 let _write_result = body_result_writer.write(Ok(None)).await;
             }
         });
@@ -222,7 +257,10 @@ fn response(
         drop(body_result_writer);
         (None, body_result)
     };
-    let (response, _transmission_result) = Response::new(headers, body, body_result);
+    let (response, transmission_result) = Response::new(headers, body, body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
+    });
     response
         .set_status_code(status)
         .map_err(|()| ErrorCode::InternalError(None))?;

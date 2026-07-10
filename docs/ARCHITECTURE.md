@@ -43,12 +43,14 @@ wrapper relays the new message's `transmission_result` into the original
 `consume_body` result; discarding either future can cancel an upstream producer
 and lose the first frame when a stream immediately fails.
 
-Regression coverage repeats the exact sequence `first frame -> body-result
-error` through stacked components and requires every response that committed
-headers to deliver the first frame before `None` or an error. Delayed streams,
-trailers, disconnects, request bodies, and failing streams are also covered.
-Malformed header blocks rejected by the host before guest invocation cannot be
-made equivalent by middleware and are treated as a host boundary.
+Regression coverage repeats an observably mid-stream sequence `first frame ->
+stream close -> body-result error` through stacked components and requires
+every response that committed headers to deliver the first frame before the
+error. A separate immediate body-result error must not hang or report success;
+it does not require a buffered frame to beat connection termination. Delayed
+streams, trailers, disconnects, request bodies, and failing streams are also
+covered. Malformed header blocks rejected by the host before guest invocation
+cannot be made equivalent by middleware and are treated as a host boundary.
 
 The authentication request JSON is bounded control-plane data. Broker response
 bodies are buffered to at most 64 KiB; application bodies remain streaming.

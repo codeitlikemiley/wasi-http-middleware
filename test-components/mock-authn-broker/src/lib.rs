@@ -71,8 +71,7 @@ impl wasip3::exports::http::handler::Guest for Component {
 }
 
 async fn collect_request(request: Request) -> Result<Vec<u8>, ErrorCode> {
-    let (result_writer, body_result) = wit_future::new(|| Ok(()));
-    drop(result_writer);
+    let (result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     let (mut body, trailers) = Request::consume_body(request, body_result);
     let mut output = Vec::new();
     loop {
@@ -86,7 +85,19 @@ async fn collect_request(request: Request) -> Result<Vec<u8>, ErrorCode> {
         match status {
             StreamResult::Complete(_) => {}
             StreamResult::Dropped => {
-                drop(trailers);
+                let _trailers = match trailers.await {
+                    Ok(trailers) => trailers,
+                    Err(error) => {
+                        let _write_result = result_writer
+                            .write(Err(ErrorCode::InternalError(None)))
+                            .await;
+                        return Err(error);
+                    }
+                };
+                result_writer
+                    .write(Ok(()))
+                    .await
+                    .map_err(|_| ErrorCode::InternalError(None))?;
                 return Ok(output);
             }
             StreamResult::Cancelled => return Err(ErrorCode::InternalError(None)),
@@ -100,10 +111,11 @@ fn valid_broker_request(body: &[u8]) -> bool {
     };
     request.version == 1
         && !request.service_id.is_empty()
+        && !request.audiences.is_empty()
         && request
             .audiences
             .iter()
-            .any(|audience| audience == &request.service_id)
+            .all(|audience| !audience.is_empty())
         && !request.request_id.is_empty()
 }
 
@@ -128,6 +140,7 @@ fn slow_policy_response() -> Result<Response, ErrorCode> {
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let chunks = body.chunks(10).map(<[u8]>::to_vec).collect::<Vec<_>>();
     let (mut writer, reader) = wit_stream::new();
+    let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     wasip3::spawn(async move {
         for (index, chunk) in chunks.into_iter().enumerate() {
             if index > 0 {
@@ -138,10 +151,13 @@ fn slow_policy_response() -> Result<Response, ErrorCode> {
                 return;
             }
         }
+        drop(writer);
+        let _write_result = body_result_writer.write(Ok(None)).await;
     });
-    let (trailers_writer, trailers) = wit_future::new(|| Ok(None));
-    drop(trailers_writer);
-    let (response, _transmission_result) = Response::new(headers, Some(reader), trailers);
+    let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
+    });
     Ok(response)
 }
 
@@ -156,17 +172,27 @@ fn response(status: u16, body: Option<Vec<u8>>) -> Result<Response, ErrorCode> {
     ];
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
-    let body = body.map(|body| {
+    let (body, body_result) = if let Some(body) = body {
         let (mut writer, reader) = wit_stream::new();
+        let (body_result_writer, body_result) =
+            wit_future::new(|| Err(ErrorCode::InternalError(None)));
         wasip3::spawn(async move {
             let remaining = writer.write_all(body).await;
-            drop(remaining);
+            if remaining.is_empty() {
+                drop(writer);
+                let _write_result = body_result_writer.write(Ok(None)).await;
+            }
         });
-        reader
+        (Some(reader), body_result)
+    } else {
+        let (body_result_writer, body_result) = wit_future::new(|| Ok(None));
+        drop(body_result_writer);
+        (None, body_result)
+    };
+    let (response, transmission_result) = Response::new(headers, body, body_result);
+    wasip3::spawn(async move {
+        let _result = transmission_result.await;
     });
-    let (trailers_writer, trailers) = wit_future::new(|| Ok(None));
-    drop(trailers_writer);
-    let (response, _transmission_result) = Response::new(headers, body, trailers);
     response
         .set_status_code(status)
         .map_err(|()| ErrorCode::InternalError(None))?;

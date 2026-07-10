@@ -53,6 +53,9 @@ User information, ambiguous suffixes, and remote HTTP are rejected.
 Optional mode skips the broker only when `Authorization` is absent. A supplied
 credential is always verified and is never downgraded to anonymous access.
 Broker URL, service ID, and audiences remain required in both modes.
+`service_id` names the terminal deployment; audiences are expected OAuth
+resource identifiers and need not equal it (for example, `orders-api` and
+`api://orders`).
 
 The broker request is `POST application/json` with the credential only in its
 `Authorization` header. Its strict JSON body is:
@@ -61,7 +64,7 @@ The broker request is `POST application/json` with the credential only in its
 {
   "version": 1,
   "service_id": "orders-api",
-  "audiences": ["orders-api"],
+  "audiences": ["api://orders"],
   "request_id": "..."
 }
 ```

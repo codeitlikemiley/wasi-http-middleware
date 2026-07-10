@@ -113,9 +113,19 @@ def audit(path: pathlib.Path, allowed_routes: list[str]) -> list[str]:
                 f"route {route!r} uses HTTP outside the Spin-internal or explicit loopback exception"
             )
         service_id = environment.get("WASI_MIDDLEWARE_SERVICE_ID")
-        audiences = environment.get("WASI_MIDDLEWARE_AUTHN_AUDIENCES", "").split(",")
-        if not isinstance(service_id, str) or service_id not in audiences:
-            errors.append(f"route {route!r} has invalid service/audience binding")
+        audience_value = environment.get("WASI_MIDDLEWARE_AUTHN_AUDIENCES")
+        audiences = (
+            [audience.strip() for audience in audience_value.split(",")]
+            if isinstance(audience_value, str)
+            else []
+        )
+        if (
+            not isinstance(service_id, str)
+            or not service_id
+            or not audiences
+            or any(not audience for audience in audiences)
+        ):
+            errors.append(f"route {route!r} has invalid service/audience configuration")
         host = parsed.hostname
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"

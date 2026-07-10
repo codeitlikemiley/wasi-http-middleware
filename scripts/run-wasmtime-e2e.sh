@@ -18,6 +18,7 @@ policy_port="${E2E_POLICY_PORT:-19091}"
 app_address="127.0.0.1:${app_port}"
 policy_address="127.0.0.1:${policy_port}"
 policy_url="http://${policy_address}/authenticate"
+authn_timeout_ms="${E2E_AUTHN_TIMEOUT_MS:-2000}"
 if [[ -n "${E2E_COMPOSED_COMPONENT:-}" ]]; then
     composed="${E2E_COMPOSED_COMPONENT}"
     require_file "${composed}"
@@ -87,10 +88,10 @@ fi
     --env "WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization" \
     --env "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=false" \
     --env "WASI_MIDDLEWARE_AUTHN_BROKER_URL=${policy_url}" \
-    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=2000" \
+    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=${authn_timeout_ms}" \
     --env "WASI_MIDDLEWARE_AUTHN_MODE=required" \
     --env "WASI_MIDDLEWARE_SERVICE_ID=echo-service" \
-    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=api://echo-service" \
     --env "WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT=64" \
     --env "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK=true" \
     --addr "${app_address}" \
@@ -115,7 +116,9 @@ if [[ "${ready}" != "true" ]]; then
 fi
 
 stream_failure_repeats="${STREAM_FAILURE_REPEATS:-25}"
+immediate_failure_repeats="${IMMEDIATE_FAILURE_REPEATS:-25}"
 if ! STREAM_FAILURE_REPEATS="${stream_failure_repeats}" \
+    IMMEDIATE_FAILURE_REPEATS="${immediate_failure_repeats}" \
     bash "${REPO_ROOT}/scripts/exercise-http-contract.sh" "http://${app_address}"; then
     cat "${temporary_directory}/policy.log" >&2
     cat "${temporary_directory}/app.log" >&2
@@ -125,7 +128,7 @@ assert_logs_do_not_contain_secrets \
     "${temporary_directory}/policy.log" \
     "${temporary_directory}/app.log"
 assert_log_occurrences \
-    "$((115 + stream_failure_repeats))" \
+    "$((115 + stream_failure_repeats + immediate_failure_repeats))" \
     "wasi-http-middleware-test: terminal-invocation" \
     "${temporary_directory}/app.log"
 
@@ -145,10 +148,10 @@ optional_address="127.0.0.1:${optional_port}"
     --env "WASI_MIDDLEWARE_CORS_HEADERS=content-type,authorization" \
     --env "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS=false" \
     --env "WASI_MIDDLEWARE_AUTHN_BROKER_URL=${policy_url}" \
-    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=2000" \
+    --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=${authn_timeout_ms}" \
     --env "WASI_MIDDLEWARE_AUTHN_MODE=optional" \
     --env "WASI_MIDDLEWARE_SERVICE_ID=echo-service" \
-    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=echo-service" \
+    --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=api://echo-service" \
     --env "WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT=64" \
     --env "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK=true" \
     --addr "${optional_address}" \

@@ -60,7 +60,7 @@ launch_app() {
         --env "WASI_MIDDLEWARE_AUTHN_TIMEOUT_MS=2000"
         --env "WASI_MIDDLEWARE_AUTHN_MODE=optional"
         --env "WASI_MIDDLEWARE_SERVICE_ID=echo-service"
-        --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=echo-service"
+        --env "WASI_MIDDLEWARE_AUTHN_AUDIENCES=api://echo-service"
         --env "WASI_MIDDLEWARE_AUTHN_MAX_IN_FLIGHT=64"
         --env "WASI_MIDDLEWARE_AUTHN_ALLOW_INSECURE_LOOPBACK=true"
     )

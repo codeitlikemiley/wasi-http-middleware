@@ -232,7 +232,7 @@ for attempt in $(seq 1 "${STREAM_FAILURE_REPEATS:-25}"); do
     set +e
     : >"${body_file}"
     : >"${header_file}"
-    failing_status="$(curl --silent --show-error --max-time 5 \
+    failing_status="$(curl --silent --max-time 5 \
         --output "${body_file}" \
         --dump-header "${header_file}" \
         --write-out '%{http_code}' \
@@ -241,7 +241,7 @@ for attempt in $(seq 1 "${STREAM_FAILURE_REPEATS:-25}"); do
         "${base_url}/failing-stream")"
     failing_exit=$?
     set -e
-    if [[ "${failing_exit}" == "0" ]] \
+    if [[ "${failing_exit}" == "0" || "${failing_exit}" == "28" ]] \
         || [[ "${failing_status}" != "200" && "${failing_status}" != "000" ]]; then
         echo "error: failing response stream was not surfaced on attempt ${attempt}" >&2
         cat "${header_file}" >&2
@@ -257,6 +257,28 @@ for attempt in $(seq 1 "${STREAM_FAILURE_REPEATS:-25}"); do
         fi
         require_header "x-request-id" '[A-Za-z0-9._:/-]{1,128}'
         require_header "x-content-type-options" 'nosniff'
+    fi
+done
+
+for attempt in $(seq 1 "${IMMEDIATE_FAILURE_REPEATS:-25}"); do
+    set +e
+    : >"${body_file}"
+    : >"${header_file}"
+    immediate_status="$(curl --silent --max-time 5 \
+        --output "${body_file}" \
+        --dump-header "${header_file}" \
+        --write-out '%{http_code}' \
+        --header 'x-wasi-test-count: 1' \
+        --header 'Authorization: Bearer allow' \
+        "${base_url}/immediate-failure")"
+    immediate_exit=$?
+    set -e
+    if [[ "${immediate_exit}" == "0" || "${immediate_exit}" == "28" ]] \
+        || [[ "${immediate_status}" != "200" && "${immediate_status}" != "000" ]]; then
+        echo "error: immediate response failure was not surfaced on attempt ${attempt}" >&2
+        cat "${header_file}" >&2
+        cat "${body_file}" >&2
+        exit 1
     fi
 done
 

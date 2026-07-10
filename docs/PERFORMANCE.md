@@ -28,11 +28,13 @@ expected linker failure is not endurance evidence.
 ## Streaming performance invariant
 
 Middleware copies bounded headers but never collects application bodies.
-Delayed first bytes must arrive before a stream finishes. A frame immediately
-followed by a body-result error is repeated through stacked middleware; every
-response that commits headers must preserve the first frame, then expose
-`None` or the terminal error. The relay fix is also verified by the sibling
-Leptos transport suite.
+Delayed first bytes must arrive before a stream finishes. A first frame
+followed by a short observable interval and a body-result error is repeated
+through stacked middleware; every response that commits headers must preserve
+the first frame, then expose the terminal error. A separate immediate-error
+case requires cancellation without a hang or false success but does not assume
+socket delivery won its scheduler race. The sibling Leptos transport suite
+also verifies the relay with an observable mid-stream failure.
 
 ## Alpha promotion status
 

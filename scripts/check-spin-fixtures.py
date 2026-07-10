@@ -42,7 +42,7 @@ def main() -> int:
     assert "WASI_MIDDLEWARE_AUTHN_BROKER_URL" in full_environment
     assert "WASI_MIDDLEWARE_AUTHN_BROKER_URL" not in public_environment
     assert full_environment["WASI_MIDDLEWARE_SERVICE_ID"] == "echo-service"
-    assert full_environment["WASI_MIDDLEWARE_AUTHN_AUDIENCES"] == "echo-service"
+    assert full_environment["WASI_MIDDLEWARE_AUTHN_AUDIENCES"] == "api://echo-service"
     assert full_components["application"]["allowed_outbound_hosts"] == [
         "http://127.0.0.1:19101"
     ]

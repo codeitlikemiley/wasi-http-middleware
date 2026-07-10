@@ -321,10 +321,9 @@ impl PrincipalV1 {
 /// Version-one trusted authentication context.
 ///
 /// `service_id` and `audiences` are deployment configuration, never values
-/// accepted from the authentication broker. Construction requires
-/// `audiences` to contain `service_id`, which binds the context to its terminal
-/// service and prevents a context minted for another audience from being
-/// reused accidentally.
+/// accepted from the authentication broker. The terminal service identity and
+/// expected OAuth audiences are distinct immutable values; for example,
+/// `orders-api` may require the audience `api://orders`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthContextV1 {
     state: AuthStateV1,
@@ -435,9 +434,6 @@ pub enum MetadataError {
         /// Name of the invalid collection.
         field: &'static str,
     },
-    /// The configured audiences did not include the terminal service.
-    #[error("authentication audiences do not include service_id")]
-    ServiceAudienceMismatch,
     /// An expiration timestamp did not follow its authentication timestamp.
     #[error("invalid authentication time range")]
     InvalidTimeRange,
@@ -569,9 +565,6 @@ fn validated_deployment(
     }
     audiences.sort_unstable();
     audiences.dedup();
-    if !audiences.iter().any(|audience| audience == &service_id) {
-        return Err(MetadataError::ServiceAudienceMismatch);
-    }
     Ok((service_id, audiences))
 }
 
@@ -854,7 +847,7 @@ mod tests {
     fn authenticated_context_round_trips_with_canonical_identity() {
         let context = AuthContextV1::authenticated(
             "orders-api",
-            ["orders-read", "orders-api"],
+            ["api://orders-write", "api://orders"],
             fixture_principal(),
             "decision-1",
             "revision-7",
@@ -869,7 +862,7 @@ mod tests {
             decoded.principal().map(PrincipalV1::identity_key),
             Some(("https://issuer.example", "user-1"))
         );
-        assert_eq!(decoded.audiences(), &["orders-api", "orders-read"]);
+        assert_eq!(decoded.audiences(), &["api://orders", "api://orders-write"]);
         let principal = decoded.principal().expect("authenticated principal");
         assert_eq!(principal.acr(), Some("urn:example:loa:2"));
         assert_eq!(principal.amr(), &["otp", "pwd"]);
@@ -893,10 +886,18 @@ mod tests {
     }
 
     #[test]
-    fn context_requires_service_to_be_an_audience() {
+    fn service_identity_and_oauth_audience_are_distinct() {
+        let context = AuthContextV1::anonymous("orders-api", ["api://orders"])
+            .expect("distinct service and audience are valid");
+        assert_eq!(context.service_id(), "orders-api");
+        assert_eq!(context.audiences(), &["api://orders"]);
+    }
+
+    #[test]
+    fn context_requires_at_least_one_audience() {
         assert_eq!(
-            AuthContextV1::anonymous("orders-api", ["other-api"]),
-            Err(MetadataError::ServiceAudienceMismatch)
+            AuthContextV1::anonymous("orders-api", Vec::<String>::new()),
+            Err(MetadataError::InvalidCollection { field: "audiences" })
         );
     }
 
