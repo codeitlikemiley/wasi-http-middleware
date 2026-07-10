@@ -7,7 +7,7 @@ use std::{borrow::Cow, sync::OnceLock};
 use http::{Method as HttpMethod, header::VARY};
 use thiserror::Error;
 use wasi_http_middleware_component_support::{
-    Header, empty_response, from_header_map, header_values, merge_header_map,
+    Header, empty_response, from_header_map, header_values, remove_header,
     replace_response_headers, request_headers, response_headers, set_header, to_header_map,
 };
 use wasi_http_policy_core::CorsConfig;
@@ -124,9 +124,15 @@ fn to_http_method(method: &Method) -> Result<HttpMethod, ()> {
 
 fn merge_cors_headers(target: &mut Vec<Header>, source: &http::HeaderMap) {
     let has_vary = source.contains_key(VARY);
-    let mut source_without_vary = source.clone();
-    source_without_vary.remove(VARY);
-    merge_header_map(target, &source_without_vary);
+    for name in source.keys() {
+        if name == VARY {
+            continue;
+        }
+        remove_header(target, name.as_str());
+        for value in source.get_all(name) {
+            target.push((name.as_str().to_owned(), value.as_bytes().to_vec()));
+        }
+    }
     if has_vary {
         merge_vary_origin(target);
     }

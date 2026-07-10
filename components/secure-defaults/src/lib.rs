@@ -16,12 +16,12 @@ use http::{
 };
 use thiserror::Error;
 use wasi_http_authn_runtime::{
-    AuthnConfig, AuthnConfigError, AuthnOutcome, AuthnRejection, authenticate,
+    AuthnConfig, AuthnConfigError, AuthnOutcome, AuthnRejection, authenticate_with_diagnostics,
 };
 use wasi_http_metadata::{AUTH_CONTEXT_HEADER, REQUEST_ID_HEADER};
 use wasi_http_middleware_component_support::{
-    Header, edit_request_headers, edit_response_headers, empty_response, from_header_map,
-    generated_request_id, header_values, request_headers, response_headers,
+    Header, diagnostic_stage, edit_request_headers, edit_response_headers, empty_response,
+    generated_request_id, header_values, request_headers, response_headers, single_header_value,
 };
 use wasi_http_policy_core::{CorsConfig, is_valid_request_id};
 use wasip3::{
@@ -70,6 +70,7 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             .get_or_init(|| load_cors_config(&get_environment()))
             .as_ref()
         else {
+            diagnostic_stage("secure_defaults_cors_config");
             return controlled_response(503, retry_after(), &HeaderMap::new(), Some(&request_id));
         };
         let Ok(method) = to_http_method(&request.get_method()) else {
@@ -91,6 +92,7 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             .get_or_init(|| AuthnConfig::from_environment(&get_environment()))
             .as_ref()
         else {
+            diagnostic_stage("secure_defaults_authn_config");
             return controlled_response(
                 503,
                 retry_after(),
@@ -98,9 +100,19 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
                 Some(&request_id),
             );
         };
-        match authenticate(&headers, &request_id, authn).await {
+        let (outcome, stage) = authenticate_with_diagnostics(&headers, &request_id, authn).await;
+        if let Some(stage) = stage {
+            diagnostic_stage(stage.as_str());
+        }
+        match outcome {
             AuthnOutcome::Pass(context) => {
-                let mut delete_names = vec![AUTHORIZATION.as_str()];
+                let mut delete_names = Vec::new();
+                if fields
+                    .iter()
+                    .any(|(name, _)| name.eq_ignore_ascii_case(AUTHORIZATION.as_str()))
+                {
+                    delete_names.push(AUTHORIZATION.as_str());
+                }
                 delete_names.extend(fields.iter().filter_map(|(name, _)| {
                     name.get(.."x-wasi-auth-".len())
                         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("x-wasi-auth-"))
@@ -162,12 +174,11 @@ fn environment_value<'a>(
 }
 
 fn canonical_request_id(headers: &[Header]) -> Result<String, ErrorCode> {
-    let values = header_values(headers, REQUEST_ID_HEADER.as_str());
-    if let [value] = values.as_slice()
+    if let Some(value) = single_header_value(headers, REQUEST_ID_HEADER.as_str())
         && let Ok(value) = std::str::from_utf8(value)
         && is_valid_request_id(value)
     {
-        return Ok((*value).to_owned());
+        return Ok(value.to_owned());
     }
     let generated = generated_request_id();
     is_valid_request_id(&generated)
@@ -176,7 +187,7 @@ fn canonical_request_id(headers: &[Header]) -> Result<String, ErrorCode> {
 }
 
 fn policy_headers(fields: &[Header]) -> Result<HeaderMap, ()> {
-    let mut headers = HeaderMap::with_capacity(4);
+    let mut headers = HeaderMap::new();
     for (name, value) in fields {
         let selected: Option<HeaderName> = if name.eq_ignore_ascii_case(AUTHORIZATION.as_str()) {
             Some(AUTHORIZATION)
@@ -283,9 +294,15 @@ fn to_http_method(method: &Method) -> Result<HttpMethod, ()> {
 
 fn cors_replacements(original: &[Header], source: &HeaderMap) -> Vec<Header> {
     let has_vary = source.contains_key(VARY);
-    let mut source_without_vary = source.clone();
-    source_without_vary.remove(VARY);
-    let mut replacements = from_header_map(&source_without_vary);
+    let mut replacements = Vec::with_capacity(source.len() + usize::from(has_vary));
+    for name in source.keys() {
+        if name == VARY {
+            continue;
+        }
+        for value in source.get_all(name) {
+            replacements.push((name.as_str().to_owned(), value.as_bytes().to_vec()));
+        }
+    }
     if has_vary {
         replacements.push((VARY_HEADER.to_owned(), merged_vary_origin(original)));
     }

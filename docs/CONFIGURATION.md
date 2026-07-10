@@ -130,3 +130,13 @@ to log header accessors or decoded identity fields.
 `secure-defaults` consumes the same CORS and authentication environment. CORS
 is initialized/evaluated first, so valid preflight never depends on broker
 availability. Golden tests compare it with the four-component chain.
+
+## Diagnostics
+
+Set `WASI_MIDDLEWARE_DIAGNOSTICS=true` only in a local capacity investigation.
+The components then emit fixed stage labels for fail-closed paths, for example
+`authn_admission`, `authn_transport`, `authn_deadline`, or
+`authn_protocol`. No request ID, credential, cookie, query, body, identity, or
+provider response is logged. The setting is disabled by default and should not
+be enabled on a normal production listener because it emits one record per
+classified failure.

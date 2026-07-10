@@ -52,6 +52,38 @@ const REQUEST_ID_CAPACITY: usize = (REQUEST_ID_PREFIX_BYTES + size_of::<u64>()) 
 
 static REQUEST_ID_PREFIX: OnceLock<[u8; REQUEST_ID_PREFIX_BYTES]> = OnceLock::new();
 static REQUEST_ID_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static DIAGNOSTICS_ENABLED: OnceLock<bool> = OnceLock::new();
+
+/// Enables bounded stage diagnostics when the deployment explicitly opts in.
+///
+/// Diagnostics contain only fixed stage names and are disabled unless
+/// `WASI_MIDDLEWARE_DIAGNOSTICS=true` is present. They must not be enabled for
+/// normal production traffic because each rejection emits one log record.
+pub fn diagnostics_enabled() -> bool {
+    *DIAGNOSTICS_ENABLED.get_or_init(diagnostics_enabled_from_environment)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn diagnostics_enabled_from_environment() -> bool {
+    wasip3::cli::environment::get_environment()
+        .iter()
+        .any(|(name, value)| name == "WASI_MIDDLEWARE_DIAGNOSTICS" && value == "true")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+const fn diagnostics_enabled_from_environment() -> bool {
+    false
+}
+
+/// Emits one fixed-name stage record when diagnostics are enabled.
+///
+/// Callers must pass a compile-time stage name and must never include request,
+/// identity, credential, query, or provider data.
+pub fn diagnostic_stage(stage: &'static str) {
+    if diagnostics_enabled() {
+        eprintln!("wasi.middleware stage={stage}");
+    }
+}
 
 /// A field could not be converted between WASI HTTP and `http` crate types.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -84,6 +116,19 @@ pub fn header_values<'a>(headers: &'a [Header], name: &str) -> Vec<&'a [u8]> {
         .collect()
 }
 
+/// Returns a borrowed value only when exactly one matching field exists.
+///
+/// This is the allocation-free form for middleware that must reject duplicate
+/// singleton headers such as request IDs or credentials.
+pub fn single_header_value<'a>(headers: &'a [Header], name: &str) -> Option<&'a [u8]> {
+    let mut values = headers
+        .iter()
+        .filter(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value.as_slice());
+    let value = values.next()?;
+    values.next().is_none().then_some(value)
+}
+
 /// Removes every field named `name`, compared case-insensitively.
 pub fn remove_header(headers: &mut Vec<Header>, name: &str) {
     headers.retain(|(candidate, _)| !candidate.eq_ignore_ascii_case(name));
@@ -113,15 +158,25 @@ pub fn set_header(headers: &mut Vec<Header>, name: &str, value: impl Into<Vec<u8
 /// hexadecimal value is suitable for propagation and logging, but must not be
 /// treated as an authentication token.
 pub fn generated_request_id() -> String {
-    let prefix = REQUEST_ID_PREFIX.get_or_init(|| {
-        let random = wasip3::random::random::get_random_bytes(REQUEST_ID_PREFIX_BYTES as u64);
-        let mut prefix = [0_u8; REQUEST_ID_PREFIX_BYTES];
-        for (target, source) in prefix.iter_mut().zip(random) {
-            *target = source;
-        }
-        prefix
-    });
+    let prefix = REQUEST_ID_PREFIX.get_or_init(random_request_id_prefix);
     encode_request_id(prefix, REQUEST_ID_SEQUENCE.fetch_add(1, Ordering::Relaxed))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn random_request_id_prefix() -> [u8; REQUEST_ID_PREFIX_BYTES] {
+    let random = wasip3::random::random::get_random_bytes(REQUEST_ID_PREFIX_BYTES as u64);
+    let mut prefix = [0_u8; REQUEST_ID_PREFIX_BYTES];
+    for (target, source) in prefix.iter_mut().zip(random) {
+        *target = source;
+    }
+    prefix
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn random_request_id_prefix() -> [u8; REQUEST_ID_PREFIX_BYTES] {
+    // Native unit tests do not have WASI random imports. Production
+    // components always compile the WASI branch above.
+    *b"native-test-id-1"
 }
 
 fn encode_request_id(prefix: &[u8; REQUEST_ID_PREFIX_BYTES], sequence: u64) -> String {
@@ -531,7 +586,9 @@ fn response_header_error() -> ErrorCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_request_id, remove_headers_with_prefix, to_header_map};
+    use super::{
+        encode_request_id, remove_headers_with_prefix, single_header_value, to_header_map,
+    };
 
     #[test]
     fn generated_request_id_encoding_is_fixed_width_and_monotonic() {
@@ -579,5 +636,18 @@ mod tests {
         }
         let debug = format!("{headers:?}");
         assert!(!debug.contains("debug-sentinel"));
+    }
+
+    #[test]
+    fn singleton_header_lookup_rejects_duplicates_without_collecting() {
+        let headers = vec![
+            ("x-request-id".to_owned(), b"one".to_vec()),
+            ("X-Request-ID".to_owned(), b"two".to_vec()),
+        ];
+        assert_eq!(single_header_value(&headers, "x-request-id"), None);
+        assert_eq!(
+            single_header_value(&headers[..1], "x-request-id"),
+            Some(b"one".as_slice())
+        );
     }
 }

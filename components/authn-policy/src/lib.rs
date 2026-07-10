@@ -6,13 +6,13 @@ use std::sync::OnceLock;
 
 use http::header::AUTHORIZATION;
 use wasi_http_authn_runtime::{
-    AuthnConfig, AuthnConfigError, AuthnOutcome, AuthnRejection, authenticate,
+    AuthnConfig, AuthnConfigError, AuthnOutcome, AuthnRejection, authenticate_with_diagnostics,
 };
 use wasi_http_metadata::{AUTH_CONTEXT_HEADER, REQUEST_ID_HEADER};
 use wasi_http_middleware_component_support::{
-    Header, empty_response, generated_request_id, remove_header, remove_headers_with_prefix,
-    replace_request_headers, replace_response_headers, request_headers, response_headers,
-    set_header, to_header_map,
+    Header, diagnostic_stage, empty_response, generated_request_id, remove_header,
+    remove_headers_with_prefix, replace_request_headers, replace_response_headers, request_headers,
+    response_headers, set_header, to_header_map,
 };
 use wasi_http_policy_core::RequestIdPolicy;
 use wasip3::{
@@ -44,10 +44,15 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
             .get_or_init(|| AuthnConfig::from_environment(&get_environment()))
             .as_ref()
         else {
+            diagnostic_stage("authn_config");
             return configuration_failure_response(&request_id);
         };
 
-        match authenticate(&headers, &request_id, config).await {
+        let (outcome, stage) = authenticate_with_diagnostics(&headers, &request_id, config).await;
+        if let Some(stage) = stage {
+            diagnostic_stage(stage.as_str());
+        }
+        match outcome {
             AuthnOutcome::Pass(context) => {
                 let mut fields = fields;
                 remove_header(&mut fields, AUTHORIZATION.as_str());

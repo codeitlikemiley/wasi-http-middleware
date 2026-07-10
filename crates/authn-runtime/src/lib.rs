@@ -259,6 +259,44 @@ pub enum AuthnRejection {
     Unavailable,
 }
 
+/// Safe internal stage classification for an authentication failure.
+///
+/// The stage is intended for opt-in diagnostics and contains no request data.
+/// Client responses continue to use the generic fail-closed status mapping.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum AuthnDiagnosticStage {
+    /// Request authorization metadata was malformed.
+    InvalidRequest,
+    /// Required credentials were not supplied.
+    MissingCredentials,
+    /// The bounded broker admission guard rejected the request.
+    Admission,
+    /// The broker transport failed before a valid response was received.
+    BrokerTransport,
+    /// The broker deadline elapsed.
+    BrokerDeadline,
+    /// The broker response was malformed or used an unsupported status.
+    BrokerProtocol,
+    /// A valid broker decision could not be encoded as trusted metadata.
+    ContextEncoding,
+}
+
+impl AuthnDiagnosticStage {
+    /// Returns the stable, secret-free log label for this stage.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidRequest => "authn_invalid_request",
+            Self::MissingCredentials => "authn_missing_credentials",
+            Self::Admission => "authn_admission",
+            Self::BrokerTransport => "authn_transport",
+            Self::BrokerDeadline => "authn_deadline",
+            Self::BrokerProtocol => "authn_protocol",
+            Self::ContextEncoding => "authn_context_encoding",
+        }
+    }
+}
+
 impl AuthnRejection {
     /// Returns the HTTP status for this rejection.
     pub fn status(self) -> u16 {
@@ -298,34 +336,82 @@ pub async fn authenticate(
     request_id: &str,
     config: &AuthnConfig,
 ) -> AuthnOutcome {
+    authenticate_with_diagnostics(headers, request_id, config)
+        .await
+        .0
+}
+
+/// Authenticates one request and returns a safe stage classification for
+/// failures.
+///
+/// The classification is intended for opt-in component diagnostics. It never
+/// contains credentials, request paths, query strings, identity values, or
+/// provider response bodies. The ordinary [`authenticate`] function remains
+/// the compatibility API when callers do not need diagnostics.
+pub async fn authenticate_with_diagnostics(
+    headers: &HeaderMap,
+    request_id: &str,
+    config: &AuthnConfig,
+) -> (AuthnOutcome, Option<AuthnDiagnosticStage>) {
     let Ok(authorization) = authorization_value(headers) else {
-        return AuthnOutcome::Reject(AuthnRejection::InvalidRequest);
+        return (
+            AuthnOutcome::Reject(AuthnRejection::InvalidRequest),
+            Some(AuthnDiagnosticStage::InvalidRequest),
+        );
     };
     let Some(authorization) = authorization else {
         return if config.mode == AuthnMode::Optional {
-            AuthnOutcome::Pass(config.anonymous_context.clone())
+            (AuthnOutcome::Pass(config.anonymous_context.clone()), None)
         } else {
-            AuthnOutcome::Reject(AuthnRejection::MissingCredentials)
+            (
+                AuthnOutcome::Reject(AuthnRejection::MissingCredentials),
+                Some(AuthnDiagnosticStage::MissingCredentials),
+            )
         };
     };
 
     let Some(_in_flight) = InFlightGuard::acquire(config.max_in_flight) else {
-        return AuthnOutcome::Reject(AuthnRejection::Unavailable);
+        return (
+            AuthnOutcome::Reject(AuthnRejection::Unavailable),
+            Some(AuthnDiagnosticStage::Admission),
+        );
     };
     let broker_request = broker_request_for(request_id, config);
-    let Ok(decision) = call_broker(config, &broker_request, authorization).await else {
-        return AuthnOutcome::Reject(AuthnRejection::Unavailable);
+    let decision = match call_broker(config, &broker_request, authorization).await {
+        Ok(decision) => decision,
+        Err(error) => {
+            let stage = match error {
+                BrokerCallError::Transport => AuthnDiagnosticStage::BrokerTransport,
+                BrokerCallError::Deadline => AuthnDiagnosticStage::BrokerDeadline,
+                BrokerCallError::Serialization
+                | BrokerCallError::InvalidStatus
+                | BrokerCallError::ResponseBody => AuthnDiagnosticStage::BrokerProtocol,
+            };
+            return (
+                AuthnOutcome::Reject(AuthnRejection::Unavailable),
+                Some(stage),
+            );
+        }
     };
     match decision {
-        AuthDecision::Allow(claims) => (*claims)
+        AuthDecision::Allow(claims) => match (*claims)
             .into_context(config.service_id.clone(), config.audiences.clone())
             .and_then(|context| encode_auth_context(&context))
-            .map_or(
+        {
+            Ok(context) => (AuthnOutcome::Pass(context), None),
+            Err(_) => (
                 AuthnOutcome::Reject(AuthnRejection::Unavailable),
-                AuthnOutcome::Pass,
+                Some(AuthnDiagnosticStage::ContextEncoding),
             ),
-        AuthDecision::Unauthenticated => AuthnOutcome::Reject(AuthnRejection::InvalidCredentials),
-        AuthDecision::Unavailable => AuthnOutcome::Reject(AuthnRejection::Unavailable),
+        },
+        AuthDecision::Unauthenticated => (
+            AuthnOutcome::Reject(AuthnRejection::InvalidCredentials),
+            None,
+        ),
+        AuthDecision::Unavailable => (
+            AuthnOutcome::Reject(AuthnRejection::Unavailable),
+            Some(AuthnDiagnosticStage::BrokerProtocol),
+        ),
     }
 }
 
