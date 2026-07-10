@@ -15,6 +15,13 @@ for component in "${COMPONENTS[@]}"; do
     printf '%s  components/%s.wasm\n' "${digest}" "${component}" >>"${temporary}"
 done
 
+for component in "${CONFORMANCE_COMPONENTS[@]}" "${TEST_COMPONENTS[@]}"; do
+    artifact="$(test_component_file "${component}")"
+    require_file "${artifact}"
+    digest="$(sha256_file "${artifact}" | awk '{print $1}')"
+    printf '%s  test-components/%s.wasm\n' "${digest}" "${component}" >>"${temporary}"
+done
+
 LC_ALL=C sort "${temporary}" >"${ARTIFACT_ROOT}/SHA256SUMS"
 rm -f "${temporary}"
 
