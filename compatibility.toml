@@ -9,9 +9,10 @@ wasmtime = "45.0.0"
 wasm_tools = "1.248.0"
 wac = "0.10.1"
 oha = "1.14.0"
-leptos_wasi = "0.4.0"
+leptos_wasi = "0.4.1"
 
 [release]
+version = "0.1.0-alpha.1"
 channel = "alpha"
 stable_spin_required = true
 publish = false
