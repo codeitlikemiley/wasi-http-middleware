@@ -215,7 +215,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "wasi-http-metadata"
-version = "0.1.0-alpha.1"
+version = "0.2.0-alpha.1"
 dependencies = [
  "base64",
  "http",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-policy-core"
-version = "0.1.0-alpha.1"
+version = "0.2.0-alpha.1"
 dependencies = [
  "http",
  "serde",

@@ -3,7 +3,7 @@
   "components": [
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.1.0-alpha.1",
+      "bom-ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.2.0-alpha.1",
       "description": "Internal fail-closed authentication broker runtime for WASIp3 middleware",
       "externalReferences": [
         {
@@ -17,14 +17,14 @@
         }
       ],
       "name": "wasi-http-authn-runtime",
-      "purl": "pkg:cargo/wasi-http-authn-runtime@0.1.0-alpha.1?download_url=file://../../crates/authn-runtime",
+      "purl": "pkg:cargo/wasi-http-authn-runtime@0.2.0-alpha.1?download_url=file://../../crates/authn-runtime",
       "scope": "required",
       "type": "library",
-      "version": "0.1.0-alpha.1"
+      "version": "0.2.0-alpha.1"
     },
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.1.0-alpha.1",
+      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1",
       "description": "Streaming-safe helpers for WASIp3 HTTP middleware components",
       "externalReferences": [
         {
@@ -38,14 +38,14 @@
         }
       ],
       "name": "wasi-http-middleware-component-support",
-      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.1.0-alpha.1?download_url=file://../../crates/component-support",
+      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.1?download_url=file://../../crates/component-support",
       "scope": "required",
       "type": "library",
-      "version": "0.1.0-alpha.1"
+      "version": "0.2.0-alpha.1"
     },
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.1.0-alpha.1",
+      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1",
       "description": "Trusted HTTP metadata contract for composed WASI middleware",
       "externalReferences": [
         {
@@ -59,14 +59,14 @@
         }
       ],
       "name": "wasi-http-metadata",
-      "purl": "pkg:cargo/wasi-http-metadata@0.1.0-alpha.1?download_url=file://../../crates/metadata",
+      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.1?download_url=file://../../crates/metadata",
       "scope": "required",
       "type": "library",
-      "version": "0.1.0-alpha.1"
+      "version": "0.2.0-alpha.1"
     },
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.1.0-alpha.1",
+      "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1",
       "description": "Pure policy engine for reusable WASI HTTP middleware components",
       "externalReferences": [
         {
@@ -80,10 +80,10 @@
         }
       ],
       "name": "wasi-http-policy-core",
-      "purl": "pkg:cargo/wasi-http-policy-core@0.1.0-alpha.1?download_url=file://../../crates/policy-core",
+      "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.1?download_url=file://../../crates/policy-core",
       "scope": "required",
       "type": "library",
-      "version": "0.1.0-alpha.1"
+      "version": "0.2.0-alpha.1"
     },
     {
       "author": "David Tolnay <dtolnay@gmail.com>",
@@ -1686,14 +1686,14 @@
     {
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2",
-        "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.1.0-alpha.1",
-        "path+file://./crates/metadata#wasi-http-metadata@0.1.0-alpha.1",
-        "path+file://./crates/component-support#wasi-http-middleware-component-support@0.1.0-alpha.1",
-        "path+file://./crates/policy-core#wasi-http-policy-core@0.1.0-alpha.1",
+        "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.2.0-alpha.1",
+        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1",
+        "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1",
+        "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1",
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./components/authn-policy#wasi-http-middleware-authn-policy@0.1.0-alpha.1"
+      "ref": "path+file://./components/authn-policy#wasi-http-middleware-authn-policy@0.2.0-alpha.1"
     },
     {
       "dependsOn": [
@@ -1701,11 +1701,11 @@
         "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2",
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
-        "path+file://./crates/metadata#wasi-http-metadata@0.1.0-alpha.1",
-        "path+file://./crates/policy-core#wasi-http-policy-core@0.1.0-alpha.1",
+        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1",
+        "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1",
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0"
       ],
-      "ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.1.0-alpha.1"
+      "ref": "path+file://./crates/authn-runtime#wasi-http-authn-runtime@0.2.0-alpha.1"
     },
     {
       "dependsOn": [
@@ -1713,7 +1713,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.1.0-alpha.1"
+      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.1"
     },
     {
       "dependsOn": [
@@ -1723,7 +1723,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18"
       ],
-      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.1.0-alpha.1"
+      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1"
     },
     {
       "dependsOn": [
@@ -1731,9 +1731,9 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
-        "path+file://./crates/metadata#wasi-http-metadata@0.1.0-alpha.1"
+        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.1"
       ],
-      "ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.1.0-alpha.1"
+      "ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.1"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103"
@@ -2082,14 +2082,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./components/authn-policy#wasi-http-middleware-authn-policy@0.1.0-alpha.1",
+      "bom-ref": "path+file://./components/authn-policy#wasi-http-middleware-authn-policy@0.2.0-alpha.1",
       "components": [
         {
-          "bom-ref": "path+file://./components/authn-policy#wasi-http-middleware-authn-policy@0.1.0-alpha.1 bin-target-0",
+          "bom-ref": "path+file://./components/authn-policy#wasi-http-middleware-authn-policy@0.2.0-alpha.1 bin-target-0",
           "name": "wasi_http_middleware_authn_policy",
-          "purl": "pkg:cargo/wasi-http-middleware-authn-policy@0.1.0-alpha.1?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-middleware-authn-policy@0.2.0-alpha.1?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.1.0-alpha.1"
+          "version": "0.2.0-alpha.1"
         }
       ],
       "description": "Strict fail-closed authentication broker middleware for WASIp3 HTTP services",
@@ -2105,10 +2105,10 @@
         }
       ],
       "name": "wasi-http-middleware-authn-policy",
-      "purl": "pkg:cargo/wasi-http-middleware-authn-policy@0.1.0-alpha.1?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-middleware-authn-policy@0.2.0-alpha.1?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.1.0-alpha.1"
+      "version": "0.2.0-alpha.1"
     },
     "properties": [
       {
@@ -2124,7 +2124,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:51a1ec58-e67c-5f18-a707-007697026a14",
+  "serialNumber": "urn:uuid:4ff92f4e-6004-509f-86cb-92fab6d35c31",
   "specVersion": "1.5",
   "version": 1
 }

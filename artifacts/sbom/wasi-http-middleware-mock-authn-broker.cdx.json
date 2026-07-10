@@ -1575,7 +1575,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./test-components/mock-authn-broker#wasi-http-middleware-mock-authn-broker@0.1.0-alpha.1"
+      "ref": "path+file://./test-components/mock-authn-broker#wasi-http-middleware-mock-authn-broker@0.2.0-alpha.1"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103"
@@ -1921,14 +1921,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./test-components/mock-authn-broker#wasi-http-middleware-mock-authn-broker@0.1.0-alpha.1",
+      "bom-ref": "path+file://./test-components/mock-authn-broker#wasi-http-middleware-mock-authn-broker@0.2.0-alpha.1",
       "components": [
         {
-          "bom-ref": "path+file://./test-components/mock-authn-broker#wasi-http-middleware-mock-authn-broker@0.1.0-alpha.1 bin-target-0",
+          "bom-ref": "path+file://./test-components/mock-authn-broker#wasi-http-middleware-mock-authn-broker@0.2.0-alpha.1 bin-target-0",
           "name": "wasi_http_middleware_mock_authn_broker",
-          "purl": "pkg:cargo/wasi-http-middleware-mock-authn-broker@0.1.0-alpha.1?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-middleware-mock-authn-broker@0.2.0-alpha.1?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.1.0-alpha.1"
+          "version": "0.2.0-alpha.1"
         }
       ],
       "description": "Deterministic WASIp3 authentication broker fixture",
@@ -1944,10 +1944,10 @@
         }
       ],
       "name": "wasi-http-middleware-mock-authn-broker",
-      "purl": "pkg:cargo/wasi-http-middleware-mock-authn-broker@0.1.0-alpha.1?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-middleware-mock-authn-broker@0.2.0-alpha.1?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.1.0-alpha.1"
+      "version": "0.2.0-alpha.1"
     },
     "properties": [
       {
@@ -1963,7 +1963,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:757998b3-9988-54aa-81ae-3c04dbbf4512",
+  "serialNumber": "urn:uuid:3948963f-9cf3-5631-8ec7-c0ee75fba867",
   "specVersion": "1.5",
   "version": 1
 }

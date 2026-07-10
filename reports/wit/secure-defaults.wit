@@ -145,6 +145,12 @@ package wasi:http@0.3.0 {
       other(string),
     }
 
+    variant scheme {
+      HTTP,
+      HTTPS,
+      other(string),
+    }
+
     resource response {
       new: static func(headers: headers, contents: option<stream<u8>>, trailers: future<result<option<trailers>, error-code>>) -> tuple<response, future<result<_, error-code>>>;
       get-status-code: func() -> status-code;
@@ -156,12 +162,6 @@ package wasi:http@0.3.0 {
     type status-code = u16;
 
     type headers = fields;
-
-    variant scheme {
-      HTTP,
-      HTTPS,
-      other(string),
-    }
 
     type field-name = string;
 

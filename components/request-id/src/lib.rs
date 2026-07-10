@@ -10,7 +10,7 @@ use wasi_http_policy_core::RequestIdPolicy;
 use wasip3::http::types::{ErrorCode, Request, Response};
 use wasip3::random::random::get_random_bytes;
 
-#[allow(missing_docs)]
+#[allow(unknown_lints, missing_docs, clippy::same_length_and_capacity)]
 mod bindings {
     wasi_http_middleware_component_support::generate_middleware_bindings!("../../wit");
 }

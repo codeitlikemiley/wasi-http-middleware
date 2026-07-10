@@ -2,7 +2,7 @@ spin_manifest_version = 2
 
 [application]
 name = "wasi-http-middleware-composed-final-canary"
-version = "0.1.0-alpha.1"
+version = "0.2.0-alpha.1"
 
 [[trigger.http]]
 route = "/..."

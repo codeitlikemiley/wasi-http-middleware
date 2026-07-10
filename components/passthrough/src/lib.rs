@@ -2,7 +2,7 @@
 
 use wasip3::http::types::{ErrorCode, Request, Response};
 
-#[allow(missing_docs)]
+#[allow(unknown_lints, missing_docs, clippy::same_length_and_capacity)]
 mod bindings {
     wasi_http_middleware_component_support::generate_middleware_bindings!("../../wit");
 }
