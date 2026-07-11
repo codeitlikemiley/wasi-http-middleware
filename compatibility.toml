@@ -21,7 +21,7 @@ leptos_wasi = "0.5.0-alpha.2"
 wasi_authz = "0.1.0-alpha.2"
 
 [release]
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 channel = "alpha"
 stable_spin_required = false
 publish = false

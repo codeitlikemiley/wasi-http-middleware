@@ -342,7 +342,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "wasi-http-authn"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "futures",
  "http",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-authn-runtime"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "futures",
  "http",
@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-metadata"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "base64",
  "http",
@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-authn-policy"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "http",
  "wasi-http-authn-runtime",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-component-support"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "http",
  "wasip3",
@@ -399,7 +399,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-cors"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "http",
  "thiserror",
@@ -411,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-echo-service"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "http",
  "wasi-http-metadata",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-mock-authn-broker"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-passthrough"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "wasi-http-middleware-component-support",
  "wasip3",
@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-request-id"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "wasi-http-middleware-component-support",
  "wasi-http-policy-core",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-secure-defaults"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "http",
  "thiserror",
@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-middleware-security-headers"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "wasi-http-middleware-component-support",
  "wasi-http-policy-core",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "wasi-http-policy-core"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "http",
  "serde",
