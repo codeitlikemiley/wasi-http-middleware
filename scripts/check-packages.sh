@@ -4,6 +4,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
+VERSION="$(sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]+)"/\1/p' Cargo.toml | head -n 1)"
+[[ -n "${VERSION}" ]]
 
 metadata="$(mktemp "${TMPDIR:-/tmp}/wasi-http-packages.XXXXXX")"
 trap 'rm -f "${metadata}"' EXIT
@@ -65,7 +67,7 @@ else
         echo "authn packaging failed for an unexpected reason" >&2
         exit 1
     }
-    echo "authn verification is blocked until its 0.2.0-alpha.2 dependencies are published"
+    echo "authn verification is blocked until its ${VERSION} dependencies are published"
 fi
 rm -f "${authn_log}"
 
@@ -84,18 +86,18 @@ else
         echo "policy-core packaging failed for an unexpected reason" >&2
         exit 1
     }
-    echo "policy-core verification is blocked until wasi-http-metadata 0.2.0-alpha.2 is published"
+    echo "policy-core verification is blocked until wasi-http-metadata ${VERSION} is published"
 fi
 rm -f "${policy_log}"
 
-POLICY_ARCHIVE_AVAILABLE="${policy_archive_available}" python3 - <<'PY'
+POLICY_ARCHIVE_AVAILABLE="${policy_archive_available}" VERSION="${VERSION}" python3 - <<'PY'
 import os
 import pathlib
 import tarfile
 import tomllib
 
 root = pathlib.Path("target/package")
-version = "0.2.0-alpha.2"
+version = os.environ["VERSION"]
 packages = [
     "wasi-http-metadata",
     "wasi-http-middleware-component-support",
