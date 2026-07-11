@@ -4,7 +4,10 @@ All notable changes are documented here.
 
 ## [Unreleased]
 
-- No changes yet.
+- Clarified that portable guest middleware remains an experimental
+  interoperability path rather than a deprecated production fallback.
+- Documented trusted native ingress as the production use of the shared policy,
+  metadata, and in-process authentication crates.
 
 ## [0.2.0-alpha.2] - 2026-07-11
 
@@ -19,7 +22,7 @@ All notable changes are documented here.
 
 - The guest `secure-defaults` stack is now a portable experimental fallback,
   not the recommended production architecture. It remains for this alpha and
-  is scheduled for removal in `0.3.0`.
+  remains available as an experimental interoperability fixture.
 
 ## [0.2.0-alpha.1] - 2026-07-10
 

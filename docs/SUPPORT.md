@@ -1,6 +1,6 @@
 # Support matrix
 
-This matrix describes `0.2.0-alpha.2`; it is not a stable-support promise.
+This matrix describes `0.2.0-alpha.3`; it is not a stable-support promise.
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -12,7 +12,7 @@ This matrix describes `0.2.0-alpha.2`; it is not a stable-support promise.
 | WAC-precomposed final chain on Spin | Unsupported canary | Precomposition cannot bypass missing host linker resources |
 | Other final-WASI hosts | ABI candidate | Must pass the complete contract before a support claim |
 | Separate four-component chain | Implemented | Request ID, security, CORS, strict authn |
-| Fused `secure-defaults` | Experimental/deprecated | Golden-equivalent portable fallback; removal planned for 0.3.0 |
+| Fused `secure-defaults` | Experimental | Golden-equivalent portable interoperability and conformance fixture |
 | In-process `wasi-http-authn` | Alpha | Trusted-ingress and terminal-broker boundary using typed request extensions |
 | Request/response streaming | Implemented | No application-body collection |
 | Mid-stream frame then error | Implemented | First frame preserved before terminal error; separate immediate-error no-hang gate |

@@ -2,7 +2,8 @@
 
 ## Composition model
 
-Every production component imports and exports `wasi:http/handler@0.3.0`.
+Every portable middleware component imports and exports
+`wasi:http/handler@0.3.0`.
 WAC wires the terminal handler into each middleware at build time; there is no
 sidecar process or network hop between middleware and the application.
 
@@ -33,7 +34,9 @@ and request/security headers decorate controlled rejections.
   identity services.
 
 The shared metadata and component-support crates are ordinary Rust library APIs.
-Production components contain no Leptos or Spin SDK dependency.
+Portable components contain no Leptos or Spin SDK dependency. Production
+deployments use the shared policy and metadata crates in a trusted native
+ingress; guest components remain experimental.
 
 ## Streaming invariant
 
