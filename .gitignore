@@ -1,8 +1,5 @@
 /target/
-/artifacts/*
-!/artifacts/SHA256SUMS
-!/artifacts/sbom/
-!/artifacts/sbom/*.cdx.json
+/artifacts/
 /reports/*
 !/reports/wit/
 !/reports/wit/*.wit

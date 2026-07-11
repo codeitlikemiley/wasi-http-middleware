@@ -96,8 +96,8 @@ jobs:
       - run: bash scripts/compose-secure-defaults.sh artifacts/test-components/echo-service.wasm
       - run: bash scripts/generate-checksums.sh
       - run: bash scripts/generate-sbom.sh
-      - name: Verify tracked artifact metadata is current
-        run: git diff --exit-code -- artifacts/SHA256SUMS artifacts/sbom reports/wit
+      - name: Verify checked-in WIT reports are current
+        run: git diff --exit-code -- reports/wit
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: final-wasi-components

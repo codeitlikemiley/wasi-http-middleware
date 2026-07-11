@@ -77,7 +77,8 @@ artifacts/components/secure-defaults.wasm
 fixtures cannot silently drift. Deterministic CycloneDX files live under
 `artifacts/sbom/`; exact component WIT lives under `reports/wit/`.
 
-`dry-run-supply-chain.sh` builds a local OCI layout, creates deterministic
+The `artifacts/` tree is generated locally or in CI and is intentionally not
+committed. `dry-run-supply-chain.sh` builds a local OCI layout, creates deterministic
 in-toto/SLSA-shaped provenance, generates an ephemeral local key, and signs and
 verifies both provenance and the fetched OCI manifest. It performs no registry
 push and deletes the private key. Promotion must replace the ephemeral key with
