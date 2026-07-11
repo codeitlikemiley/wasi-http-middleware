@@ -6,7 +6,10 @@ The terminal trusts `x-wasi-auth-context` only when every externally reachable
 route passes through the declared component boundary. No second trigger,
 service address, or ingress route may reach it directly. Run
 `audit-spin-manifest.py` for future native Spin manifests; current Spin final-WIT
-fixtures are incompatibility canaries, not deployable production manifests.
+fixtures are compatibility canaries, not deployable production manifests.
+Pinned Spin main can run a plain final-WASI terminal, but composed middleware
+on the ordinary build is still blocked and native trigger middleware still
+uses release-candidate WIT.
 
 The context is metadata, not a credential. Middleware first strips the client
 `Authorization` value and every reserved header, then inserts one validated

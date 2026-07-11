@@ -8,6 +8,12 @@ changes the file and workspace package version together. WIT changes require
 rebuilding every component, regenerating reports/SBOMs/checksums, and rerunning
 all behavioral and incompatibility gates.
 
+Rust 1.93.0 is the library MSRV. The component crates use `wasip3` 0.7.0 and
+`wit-bindgen` 0.59.0 to export exact final `wasi:http@0.3.0`. Browser-side
+`wasm-bindgen` is not part of this workspace; 0.2.126 is validated by the
+sibling Leptos browser integration and must not be presented as a server
+component dependency.
+
 ## Required gates
 
 ```bash
@@ -27,6 +33,14 @@ bash scripts/run-wasmtime-e2e.sh
 bash scripts/run-wasmtime-secure-defaults-e2e.sh
 bash scripts/compare-wasmtime-profiles.sh
 SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
+SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh default)" \
+  SPIN_COMPAT_PROFILE=main-terminal bash scripts/run-spin-e2e.sh
+SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh default)" \
+  SPIN_COMPAT_PROFILE=main-precomposed-default bash scripts/run-spin-e2e.sh
+SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh no-default-features)" \
+  SPIN_COMPAT_PROFILE=main-precomposed-no-cpu bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=native-middleware \
+  SPIN_BIN=/path/to/spin-at-27451471 bash scripts/run-spin-e2e.sh
 CARGO_FUZZ_BIN=/path/to/cargo-fuzz bash scripts/run-fuzz-smoke.sh
 bash scripts/generate-checksums.sh
 bash scripts/generate-sbom.sh
@@ -34,10 +48,12 @@ bash scripts/dry-run-supply-chain.sh
 HOST=wasmtime bash scripts/soak-runtime.sh
 ```
 
-The Spin command is an expected-incompatibility canary. A successful Spin host
-startup fails the canary until the repository replaces it with behavioral E2E.
-The pinned native-middleware commit runs separately with
-`SPIN_COMPAT_PROFILE=native-middleware`.
+The tagged stable and pinned native-middleware profiles are expected-failure
+canaries. Pinned Spin main `c34c584` has a positive final-terminal check, an
+expected default-build CPU-accounting failure for WAC composition, and a
+positive no-default-features diagnostic. The last result does not qualify a
+production runtime. A support claim requires a tagged Spin release whose
+ordinary build passes the complete behavioral, performance, and soak suites.
 
 Component contracts validate async component-model encoding, exact imports,
 one handler import/export, forbidden capabilities, deterministic WIT reports,

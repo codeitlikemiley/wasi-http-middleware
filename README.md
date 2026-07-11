@@ -6,8 +6,15 @@ service and do not depend on Spin SDK, Leptos, or an application framework.
 
 > **Alpha:** `0.2.0-alpha.3` targets final WASI 0.3 with Wasmtime 46.0.1.
 > Tagged Spin 4.0.2 does not link final `wasi:http@0.3.0`. Pinned Spin main
-> runs final terminals and outbound HTTP, but its default CPU-metrics hook
-> panics for composed handlers and native middleware remains RC-only.
+> `c34c584` (`4.1.0-pre0`) runs final terminals and outbound HTTP, but this is
+> an experimental, commit-pinned compatibility result rather than a tagged
+> support claim. Its default CPU-metrics hook panics for WAC-precomposed
+> handlers, and Spin's native middleware contract remains RC-only.
+
+The tested build contract is Rust 1.93.0 (the MSRV), `wasip3` 0.7.0, exact
+`wasi:http@0.3.0`, and `wit-bindgen` 0.59.0. `wasm-bindgen` is not used to build
+these server components; the sibling Leptos browser fixture currently tests
+its separate JavaScript/Wasm bridge with `wasm-bindgen` 0.2.126.
 
 ## Components
 
@@ -63,18 +70,27 @@ Spin lanes separate stable, main-terminal, composed, and native behavior:
 
 ```bash
 SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
+
+SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh default)"
 SPIN_COMPAT_PROFILE=main-terminal \
-  SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
+  SPIN_BIN="$SPIN_BIN" bash scripts/run-spin-e2e.sh
 SPIN_COMPAT_PROFILE=main-precomposed-default \
-  SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
+  SPIN_BIN="$SPIN_BIN" bash scripts/run-spin-e2e.sh
+
+SPIN_NO_CPU_BIN="$(bash scripts/bootstrap-spin-main.sh no-default-features)"
 SPIN_COMPAT_PROFILE=main-precomposed-no-cpu \
-  SPIN_BIN=/path/to/pinned-spin-no-default-features bash scripts/run-spin-e2e.sh
+  SPIN_BIN="$SPIN_NO_CPU_BIN" bash scripts/run-spin-e2e.sh
+
 SPIN_COMPAT_PROFILE=native-middleware \
   SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
 ```
 
-The no-default-features profile is diagnostic only. Production promotion
-requires the normal Spin build to pass after the upstream CPU-accounting fix.
+`main-terminal` is a positive final-WASI terminal/outbound-HTTP canary.
+`main-precomposed-default` and `native-middleware` are expected-failure
+canaries. `main-precomposed-no-cpu` proves the composed component itself can
+run, but that custom no-default-features binary is diagnostic only. Production
+promotion requires a tagged Spin release and the ordinary default build to
+pass after the upstream CPU-accounting fix.
 
 Security and release evidence:
 
@@ -91,6 +107,7 @@ never pushes, tags, publishes, or retains the private key.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Tested compatibility](docs/COMPATIBILITY.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Trust boundary](docs/TRUST-BOUNDARY.md)
 - [Support matrix](docs/SUPPORT.md)
