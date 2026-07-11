@@ -3,7 +3,7 @@
   "components": [
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2",
+      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3",
       "description": "Trusted HTTP metadata contract for composed WASI middleware",
       "externalReferences": [
         {
@@ -17,10 +17,10 @@
         }
       ],
       "name": "wasi-http-metadata",
-      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.2?download_url=file://../metadata",
+      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.3?download_url=file://../metadata",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.2"
+      "version": "0.2.0-alpha.3"
     },
     {
       "author": "Marshall Pierce <marshall@mpierce.org>",
@@ -536,7 +536,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18"
       ],
-      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2"
+      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3"
     },
     {
       "dependsOn": [
@@ -544,9 +544,9 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
-        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2"
+        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3"
       ],
-      "ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2"
+      "ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.3"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#base64@0.22.1"
@@ -648,14 +648,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2",
+      "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.3",
       "components": [
         {
-          "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.2 bin-target-0",
+          "bom-ref": "path+file://./crates/policy-core#wasi-http-policy-core@0.2.0-alpha.3 bin-target-0",
           "name": "wasi_http_policy_core",
-          "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.3?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.2.0-alpha.2"
+          "version": "0.2.0-alpha.3"
         }
       ],
       "description": "Pure policy engine for reusable WASI HTTP middleware components",
@@ -671,10 +671,10 @@
         }
       ],
       "name": "wasi-http-policy-core",
-      "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.2?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-policy-core@0.2.0-alpha.3?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.2"
+      "version": "0.2.0-alpha.3"
     },
     "properties": [
       {
@@ -690,7 +690,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:32d7a84e-f5e5-54e5-890b-533965e9611c",
+  "serialNumber": "urn:uuid:9e11d704-2180-5be2-bfcc-4ad5e4caa308",
   "specVersion": "1.5",
   "version": 1
 }

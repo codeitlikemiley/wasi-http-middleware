@@ -3,7 +3,7 @@
   "components": [
     {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2",
+      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3",
       "description": "Trusted HTTP metadata contract for composed WASI middleware",
       "externalReferences": [
         {
@@ -17,10 +17,10 @@
         }
       ],
       "name": "wasi-http-metadata",
-      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.2?download_url=file://../../crates/metadata",
+      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.3?download_url=file://../../crates/metadata",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.2"
+      "version": "0.2.0-alpha.3"
     },
     {
       "author": "David Tolnay <dtolnay@gmail.com>",
@@ -1628,16 +1628,16 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18"
       ],
-      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2"
+      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3"
     },
     {
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#http@1.4.2",
-        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2",
+        "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3",
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./test-components/echo-service#wasi-http-middleware-echo-service@0.2.0-alpha.2"
+      "ref": "path+file://./test-components/echo-service#wasi-http-middleware-echo-service@0.2.0-alpha.3"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103"
@@ -1986,14 +1986,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./test-components/echo-service#wasi-http-middleware-echo-service@0.2.0-alpha.2",
+      "bom-ref": "path+file://./test-components/echo-service#wasi-http-middleware-echo-service@0.2.0-alpha.3",
       "components": [
         {
-          "bom-ref": "path+file://./test-components/echo-service#wasi-http-middleware-echo-service@0.2.0-alpha.2 bin-target-0",
+          "bom-ref": "path+file://./test-components/echo-service#wasi-http-middleware-echo-service@0.2.0-alpha.3 bin-target-0",
           "name": "wasi_http_middleware_echo_service",
-          "purl": "pkg:cargo/wasi-http-middleware-echo-service@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-middleware-echo-service@0.2.0-alpha.3?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.2.0-alpha.2"
+          "version": "0.2.0-alpha.3"
         }
       ],
       "description": "Terminal WASIp3 HTTP fixture for middleware conformance tests",
@@ -2009,10 +2009,10 @@
         }
       ],
       "name": "wasi-http-middleware-echo-service",
-      "purl": "pkg:cargo/wasi-http-middleware-echo-service@0.2.0-alpha.2?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-middleware-echo-service@0.2.0-alpha.3?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.2"
+      "version": "0.2.0-alpha.3"
     },
     "properties": [
       {
@@ -2028,7 +2028,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:fd01bb91-3cab-50de-9a6d-92aadff4e072",
+  "serialNumber": "urn:uuid:b5f4bce3-f279-579d-9e6d-813ae0c369e4",
   "specVersion": "1.5",
   "version": 1
 }

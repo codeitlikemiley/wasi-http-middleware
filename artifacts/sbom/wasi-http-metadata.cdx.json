@@ -515,7 +515,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
         "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18"
       ],
-      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2"
+      "ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#base64@0.22.1"
@@ -617,14 +617,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2",
+      "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3",
       "components": [
         {
-          "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.2 bin-target-0",
+          "bom-ref": "path+file://./crates/metadata#wasi-http-metadata@0.2.0-alpha.3 bin-target-0",
           "name": "wasi_http_metadata",
-          "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.3?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.2.0-alpha.2"
+          "version": "0.2.0-alpha.3"
         }
       ],
       "description": "Trusted HTTP metadata contract for composed WASI middleware",
@@ -640,10 +640,10 @@
         }
       ],
       "name": "wasi-http-metadata",
-      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.2?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-metadata@0.2.0-alpha.3?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.2"
+      "version": "0.2.0-alpha.3"
     },
     "properties": [
       {
@@ -659,7 +659,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:84e35257-5cd3-5e97-9ccd-1894f9770b21",
+  "serialNumber": "urn:uuid:ffa960d8-c975-59a9-8cd4-045f0e3db63f",
   "specVersion": "1.5",
   "version": 1
 }

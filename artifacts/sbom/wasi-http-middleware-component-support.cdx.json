@@ -1574,7 +1574,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#wasip3@0.7.0+wasi-0.3.0",
         "registry+https://github.com/rust-lang/crates.io-index#wit-bindgen@0.59.0"
       ],
-      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2"
+      "ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.3"
     },
     {
       "ref": "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103"
@@ -1920,14 +1920,14 @@
     ],
     "component": {
       "author": "Uriah Galang <codeitlikemiley@gmail.com>",
-      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2",
+      "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.3",
       "components": [
         {
-          "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.2 bin-target-0",
+          "bom-ref": "path+file://./crates/component-support#wasi-http-middleware-component-support@0.2.0-alpha.3 bin-target-0",
           "name": "wasi_http_middleware_component_support",
-          "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.2?download_url=file://.#src/lib.rs",
+          "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.3?download_url=file://.#src/lib.rs",
           "type": "library",
-          "version": "0.2.0-alpha.2"
+          "version": "0.2.0-alpha.3"
         }
       ],
       "description": "Streaming-safe helpers for WASIp3 HTTP middleware components",
@@ -1943,10 +1943,10 @@
         }
       ],
       "name": "wasi-http-middleware-component-support",
-      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.2?download_url=file://.",
+      "purl": "pkg:cargo/wasi-http-middleware-component-support@0.2.0-alpha.3?download_url=file://.",
       "scope": "required",
       "type": "library",
-      "version": "0.2.0-alpha.2"
+      "version": "0.2.0-alpha.3"
     },
     "properties": [
       {
@@ -1962,7 +1962,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:9cacf7ff-faf0-5034-bf7f-0e30adf35f95",
+  "serialNumber": "urn:uuid:ecf29f3a-d582-538a-a908-f7ea972907c0",
   "specVersion": "1.5",
   "version": 1
 }
