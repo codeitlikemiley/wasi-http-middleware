@@ -5,8 +5,9 @@ Framework-neutral, streaming-safe HTTP middleware components for the final
 service and do not depend on Spin SDK, Leptos, or an application framework.
 
 > **Alpha:** `0.2.0-alpha.3` targets final WASI 0.3 with Wasmtime 46.0.1.
-> Current Spin hosts do not yet link final `wasi:http@0.3.0`; their lanes are
-> explicit expected-incompatibility canaries, not runtime support claims.
+> Tagged Spin 4.0.2 does not link final `wasi:http@0.3.0`. Pinned Spin main
+> runs final terminals and outbound HTTP, but its default CPU-metrics hook
+> panics for composed handlers and native middleware remains RC-only.
 
 ## Components
 
@@ -58,17 +59,22 @@ bash scripts/compose-wasmtime.sh artifacts/test-components/echo-service.wasm
 bash scripts/compose-secure-defaults.sh artifacts/test-components/echo-service.wasm
 ```
 
-Spin lanes prove the current incompatibility remains understood:
+Spin lanes separate stable, main-terminal, composed, and native behavior:
 
 ```bash
 SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=main-terminal \
+  SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=main-precomposed-default \
+  SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=main-precomposed-no-cpu \
+  SPIN_BIN=/path/to/pinned-spin-no-default-features bash scripts/run-spin-e2e.sh
 SPIN_COMPAT_PROFILE=native-middleware \
   SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
 ```
 
-Both commands succeed only when Spin fails for the pinned final-WIT linker or
-RC-middleware mismatch. They must be replaced by behavioral E2E when Spin ships
-matching final WASI 0.3 host bindings.
+The no-default-features profile is diagnostic only. Production promotion
+requires the normal Spin build to pass after the upstream CPU-accounting fix.
 
 Security and release evidence:
 

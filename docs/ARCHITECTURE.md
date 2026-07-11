@@ -73,11 +73,11 @@ public unless the CDN/fileserver/ingress explicitly protects them.
 
 ## Host and trigger boundary
 
-Wasmtime 46.0.1 runs the final WASI 0.3 behavioral suite. Spin 4.0.0 lacks final
-`wasi:http@0.3.0` resource implementations, and the pinned native-middleware
-commit targets the March RC. WAC precomposition cannot compensate for a host
-linker that lacks final resources, so both Spin lanes are incompatibility
-canaries.
+Wasmtime 46.0.1 runs the final WASI 0.3 behavioral suite. Tagged Spin 4.0.2
+lacks final `wasi:http@0.3.0` resource implementations. Pinned Spin main runs
+the final terminal and outbound HTTP, but its default CPU-metrics hook panics
+for WAC-composed handlers; the pinned native-middleware commit still targets
+the March RC. These remain distinct compatibility canaries.
 
 HTTP middleware cannot wrap Redis, MQTT, cron, or custom triggers because they
 export different WIT worlds. Future adapters may reuse pure policy crates, but

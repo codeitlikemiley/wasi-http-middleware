@@ -60,9 +60,11 @@ RSS growth.
 HOST=wasmtime bash scripts/soak-runtime.sh
 ```
 
-Spin soak is deliberately disabled: Spin 4.0.0 lacks final
-`wasi:http@0.3.0` resources and the pinned middleware commit is RC-only. An
-expected linker failure is not endurance evidence.
+Spin soak remains non-promoting. Tagged Spin 4.0.2 lacks final
+`wasi:http@0.3.0` resources; pinned Spin main runs plain final terminals but
+its default CPU-metrics hook panics for composed handlers, and native
+middleware remains RC-only. A no-default-features diagnostic is not endurance
+evidence.
 
 ## Streaming performance invariant
 

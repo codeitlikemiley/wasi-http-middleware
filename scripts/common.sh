@@ -41,19 +41,39 @@ resolve_pinned_tool() {
     local command_name="$2"
     local expected="$3"
     local configured="${!environment_name:-}"
-    local cache_root="${WASI_HTTP_MIDDLEWARE_TOOL_ROOT:-${HOME}/.cache/leptos-wasi-tools}"
-    local cached="${cache_root}/${command_name}-${expected}/${command_name}"
+    local repo_local="${REPO_ROOT}/target/tools/${command_name}-${expected}/${command_name}"
+    local legacy_cache="${WASI_HTTP_MIDDLEWARE_TOOL_ROOT:-${HOME}/.cache/leptos-wasi-tools}/${command_name}-${expected}/${command_name}"
     local selected
 
     if [[ -n "${configured}" ]]; then
         selected="${configured}"
-    elif [[ -x "${cached}" ]]; then
-        selected="${cached}"
-    else
+    elif command -v "${command_name}" >/dev/null 2>&1 \
+        && version_matches "${command_name}" "${expected}"; then
         selected="${command_name}"
+    elif [[ -x "${repo_local}" ]]; then
+        selected="${repo_local}"
+    elif [[ -x "${legacy_cache}" ]]; then
+        selected="${legacy_cache}"
+    else
+        echo "error: ${command_name} ${expected} is required; install it or set ${environment_name}" >&2
+        return 1
     fi
     require_version "${selected}" "${expected}"
     printf '%s\n' "${selected}"
+}
+
+version_matches() {
+    local command_name="$1"
+    local expected="$2"
+    local actual
+    if actual="$("${command_name}" --version 2>&1)"; then
+        :
+    elif actual="$("${command_name}" version 2>&1)"; then
+        :
+    else
+        return 1
+    fi
+    [[ "${actual}" == *"${expected}"* ]]
 }
 
 require_version() {

@@ -6,7 +6,13 @@ wit_bindgen = "0.59.0"
 # The binding macro uses wit-bindgen 0.59. Component code uses
 # wasip3::wit_bindgen stream results and wasip3::spawn so resource/runtime
 # helpers match the wasip3 0.7-generated types.
-spin_stable = "4.0.0"
+spin_stable = "4.0.2"
+spin_main_version = "4.1.0-pre0"
+spin_main_revision = "c34c584dbf77b3a3528ad0536aa9ce4761b9f772"
+spin_main_final_wasi_terminal = true
+spin_main_final_wasi_outbound_http = true
+spin_main_precomposed_default_features = false
+spin_main_native_middleware = false
 spin_middleware_revision = "27451471b8ba0faeffa01c5a4ddd6daee9a9d526"
 spin_sdk = "6.0.0"
 wasmtime = "46.0.1"

@@ -7,9 +7,11 @@ This matrix describes `0.2.0-alpha.3`; it is not a stable-support promise.
 | Final WASI 0.3 HTTP middleware | Alpha | Exact `wasi:http/middleware@0.3.0` |
 | Rust build target | Build detail | `wasm32-wasip2` emits the component; public ABI is WASI 0.3 |
 | Wasmtime 46.0.1 | Behavioral host | Composition, security, streaming, parity, concurrency, and soak runners |
-| Spin 4.0.0 | Unsupported canary | Missing final `wasi:http@0.3.0` host resource implementations |
+| Spin 4.0.2 | Unsupported canary | Missing final `wasi:http@0.3.0` host resource implementations |
+| Spin main `c34c584...` terminal | Experimental canary | Final terminal and outbound HTTP work; no tagged support claim |
+| Spin main WAC composition | Blocked upstream | Default CPU-metrics hook panics; no-default-features build is diagnostic only |
 | Spin revision `27451471...` | Unsupported canary | Native middleware remains March-RC WIT and cannot compose final components |
-| WAC-precomposed final chain on Spin | Unsupported canary | Precomposition cannot bypass missing host linker resources |
+| WAC-precomposed final chain on Spin | Experimental, blocked | Requires a tagged host plus the composed-handler CPU-accounting fix |
 | Other final-WASI hosts | ABI candidate | Must pass the complete contract before a support claim |
 | Separate four-component chain | Implemented | Request ID, security, CORS, strict authn |
 | Fused `secure-defaults` | Experimental | Golden-equivalent portable interoperability and conformance fixture |
