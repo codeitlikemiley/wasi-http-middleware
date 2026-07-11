@@ -155,7 +155,7 @@ jobs:
       matrix:
         include:
           - profile: stable-final
-            revision: v4.0.0
+            revision: v4.0.2
           - profile: native-middleware
             revision: 27451471b8ba0faeffa01c5a4ddd6daee9a9d526
     steps:
