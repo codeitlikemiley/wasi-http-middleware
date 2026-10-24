@@ -4,17 +4,24 @@ Framework-neutral, streaming-safe HTTP middleware components for the final
 `wasi:http/middleware@0.3.0` contract. They can wrap any matching terminal
 service and do not depend on Spin SDK, Leptos, or an application framework.
 
-> **Alpha:** `0.2.0-alpha.3` targets final WASI 0.3 with Wasmtime 46.0.1.
-> Tagged Spin 4.0.2 does not link final `wasi:http@0.3.0`. Pinned Spin main
-> `c34c584` (`4.1.0-pre0`) runs final terminals and outbound HTTP, but this is
-> an experimental, commit-pinned compatibility result rather than a tagged
-> support claim. Its default CPU-metrics hook panics for WAC-precomposed
-> handlers, and Spin's native middleware contract remains RC-only.
+This repository is the canonical source for these middleware crates and
+components. `wasi-auth`'s `legacy/wasi-http-middleware` tree is a vendored
+snapshot and must not gain its own fixes. The removal plan for that copy is
+in [Canonical ownership](docs/CANONICAL.md).
 
-The tested build contract is Rust 1.93.0 (the MSRV), `wasip3` 0.7.0, exact
-`wasi:http@0.3.0`, and `wit-bindgen` 0.59.0. `wasm-bindgen` is not used to build
-these server components; the sibling Leptos browser fixture currently tests
-its separate JavaScript/Wasm bridge with `wasm-bindgen` 0.2.126.
+> **Alpha:** `0.2.0-alpha.3` targets final WASI 0.3. The behavioral hosts are
+> Wasmtime 50.0.0 and official Spin 4.2.5. Spin serves the WAC-composed
+> handler and native `dependencies.middleware`. HTTP/1.1 trailers arrive when
+> the request sends `TE: trailers`.
+
+The tested build contract is Rust 1.99.0, MSRV 1.94, `wasip3`
+`0.9.0+wasi-0.3.0`, exact `wasi:http@0.3.0`, and `wit-bindgen` 0.62.0.
+`wasm-bindgen` is not used to build these server components; the sibling
+Leptos browser fixture currently tests its separate JavaScript/Wasm bridge
+with `wasm-bindgen` 0.2.126. Consumers that import `spin-sdk` pin
+`codeitlikemiley/spin-rust-sdk` revision
+`3cf30012b50a1afb750dac3d28aa6da4a32c3468`. This workspace does not depend on
+that crate.
 
 ## Components
 
@@ -25,7 +32,8 @@ request-id -> security-headers -> cors -> authn-policy -> application
 ```
 
 - `request-id` validates or replaces `x-request-id` and returns it.
-- `security-headers` applies `nosniff` and a conservative referrer policy.
+- `security-headers` sets `nosniff` and a conservative referrer policy only
+  when those fields are absent.
 - `cors` uses exact allowlists and completes preflight before authentication.
 - `authn-policy` calls a credential-verification broker, fails closed, strips
   credentials and spoofed metadata, and injects one bounded versioned context.
@@ -66,31 +74,20 @@ bash scripts/compose-wasmtime.sh artifacts/test-components/echo-service.wasm
 bash scripts/compose-secure-defaults.sh artifacts/test-components/echo-service.wasm
 ```
 
-Spin lanes separate stable, main-terminal, composed, and native behavior:
+Spin 4.2.5 is the host. Download the official release, then run both profiles:
 
 ```bash
-SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
-
-SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh default)"
-SPIN_COMPAT_PROFILE=main-terminal \
+SPIN_BIN="$(bash scripts/bootstrap-spin-release.sh)"
+SPIN_COMPAT_PROFILE=release-composed \
   SPIN_BIN="$SPIN_BIN" bash scripts/run-spin-e2e.sh
-SPIN_COMPAT_PROFILE=main-precomposed-default \
+SPIN_COMPAT_PROFILE=release-native \
   SPIN_BIN="$SPIN_BIN" bash scripts/run-spin-e2e.sh
-
-SPIN_NO_CPU_BIN="$(bash scripts/bootstrap-spin-main.sh no-default-features)"
-SPIN_COMPAT_PROFILE=main-precomposed-no-cpu \
-  SPIN_BIN="$SPIN_NO_CPU_BIN" bash scripts/run-spin-e2e.sh
-
-SPIN_COMPAT_PROFILE=native-middleware \
-  SPIN_BIN=/path/to/pinned-spin bash scripts/run-spin-e2e.sh
 ```
 
-`main-terminal` is a positive final-WASI terminal/outbound-HTTP canary.
-`main-precomposed-default` and `native-middleware` are expected-failure
-canaries. `main-precomposed-no-cpu` proves the composed component itself can
-run, but that custom no-default-features binary is diagnostic only. Production
-promotion requires a tagged Spin release and the ordinary default build to
-pass after the upstream CPU-accounting fix.
+`release-composed` serves the WAC-composed component.
+`release-native` serves `dependencies.middleware`. Both must pass the shared
+HTTP contract, including HTTP/1.1 trailers with `TE: trailers` and their
+omission without that request field. Spin also writes the trailer on HTTP/2.
 
 Security and release evidence:
 

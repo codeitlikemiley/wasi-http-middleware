@@ -18,7 +18,8 @@ use wasi_http_metadata::{
     parse_auth_context, strip_reserved_auth_headers,
 };
 use wasi_http_policy_core::{
-    AuthDecision, AuthnRequestV1, authorization_value, is_valid_request_id,
+    AuthDecision, AuthHookRejection, AuthnRequestV1, accepted_claims, accepted_request_id,
+    authorization_value,
 };
 
 /// Authentication behavior when a request has no credentials.
@@ -173,16 +174,19 @@ where
             .authenticate(&broker_request, &authorization)
             .await
             .map_err(|_| AuthnRejection::Unavailable)?;
-        let context = match decision {
-            AuthDecision::Allow(claims) => claims
-                .into_context(
-                    self.config.service_id.clone(),
-                    self.config.audiences.clone(),
-                )
-                .map_err(|_| AuthnRejection::Unavailable)?,
-            AuthDecision::Unauthenticated => return Err(AuthnRejection::InvalidCredentials),
-            AuthDecision::Unavailable => return Err(AuthnRejection::Unavailable),
+        let claims = match accepted_claims(decision) {
+            Ok(claims) => claims,
+            Err(AuthHookRejection::InvalidCredentials) => {
+                return Err(AuthnRejection::InvalidCredentials);
+            }
+            Err(AuthHookRejection::Unavailable) => return Err(AuthnRejection::Unavailable),
         };
+        let context = claims
+            .into_context(
+                self.config.service_id.clone(),
+                self.config.audiences.clone(),
+            )
+            .map_err(|_| AuthnRejection::Unavailable)?;
         validate_lifetime(&context, unix_time())?;
         Ok(install_verified(request, context))
     }
@@ -207,16 +211,22 @@ impl TrustedIngressConfig {
     }
 }
 
-/// Accepts and removes one context issued by a private trusted ingress.
+/// Accepts and removes one canonical [`AuthContextV1`] from a private hop.
 ///
-/// The terminal listener must not be publicly reachable. Any surviving bearer
-/// credential makes the boundary invalid. On success, wire metadata is removed
-/// and replaced by a typed request extension.
+/// The value must be this crate's unsigned base64url JSON context. It is not
+/// interchangeable with `wasi-auth`'s HMAC-SHA-256 envelope
+/// (`base64url(payload).base64url(mac)`), which reuses
+/// [`AUTH_CONTEXT_HEADER`] and is rejected as a malformed context. This
+/// function does not verify an HMAC. The terminal listener must not be
+/// publicly reachable. Any surviving bearer credential makes the boundary
+/// invalid. On success, wire metadata is removed and replaced by a typed
+/// request extension. Service ID and the audience list must match the
+/// deployment configuration exactly.
 ///
 /// # Errors
 ///
 /// Returns [`AuthnRejection::InvalidBoundary`] for missing, duplicated,
-/// malformed, expired, or incorrectly bound ingress metadata.
+/// malformed, expired, incorrectly bound, or HMAC-shaped ingress metadata.
 pub fn accept_trusted_ingress<B>(
     config: &TrustedIngressConfig,
     request: &mut Request<B>,
@@ -228,13 +238,7 @@ pub fn accept_trusted_ingress<B>(
         return Err(AuthnRejection::InvalidBoundary);
     }
     let context = parsed.map_err(|_| AuthnRejection::InvalidBoundary)?;
-    if context.service_id() != config.0.service_id
-        || !config
-            .0
-            .audiences
-            .iter()
-            .any(|expected| context.audiences().iter().any(|actual| actual == expected))
-    {
+    if context.service_id() != config.0.service_id || context.audiences() != config.0.audiences {
         return Err(AuthnRejection::InvalidBoundary);
     }
     validate_lifetime(&context, unix_time()).map_err(|_| AuthnRejection::InvalidBoundary)?;
@@ -263,12 +267,13 @@ pub enum AuthnRejection {
 }
 
 fn canonical_request_id<B>(request: &Request<B>) -> Option<&str> {
-    let mut values = request.headers().get_all(&REQUEST_ID_HEADER).iter();
-    let value = values.next()?.to_str().ok()?;
-    if values.next().is_some() || !is_valid_request_id(value) {
-        return None;
-    }
-    Some(value)
+    accepted_request_id(
+        request
+            .headers()
+            .get_all(REQUEST_ID_HEADER)
+            .iter()
+            .map(http::HeaderValue::as_bytes),
+    )
 }
 
 fn sanitize_headers<B>(request: &mut Request<B>) {
@@ -381,5 +386,75 @@ mod tests {
 
         assert_eq!(result, Err(AuthnRejection::Unavailable));
         assert!(!request.headers().contains_key(AUTHORIZATION));
+    }
+
+    #[test]
+    fn optional_mode_rejects_supplied_credentials_instead_of_failing_open() {
+        let decision = parse_unauthenticated();
+        let config =
+            AuthenticationConfig::new("orders", ["api://orders"], AuthenticationMode::Optional)
+                .expect("valid config");
+        let authenticator = Authenticator::new(config, FixedDecision(decision));
+        let mut request = Request::new(());
+        request
+            .headers_mut()
+            .insert(AUTHORIZATION, HeaderValue::from_static("Bearer secret"));
+        request
+            .headers_mut()
+            .insert(REQUEST_ID_HEADER, HeaderValue::from_static("request-1"));
+
+        let result = futures::executor::block_on(authenticator.authenticate_request(&mut request));
+
+        assert_eq!(result, Err(AuthnRejection::InvalidCredentials));
+        assert!(!request.headers().contains_key(AUTHORIZATION));
+        assert!(request.extensions().get::<VerifiedAuthContext>().is_none());
+    }
+
+    #[test]
+    fn trusted_ingress_rejects_hmac_envelopes_and_extra_audiences() {
+        let mut request = Request::new(());
+        request.headers_mut().insert(
+            AUTH_CONTEXT_HEADER,
+            HeaderValue::from_static("eyJ2ZXJzaW9uIjoxfQ.dGVzdC1zaWduYXR1cmU"),
+        );
+        let config = TrustedIngressConfig::new("orders", ["api://orders"]).expect("valid config");
+
+        let result = accept_trusted_ingress(&config, &mut request);
+
+        assert_eq!(result, Err(AuthnRejection::InvalidBoundary));
+        assert!(!request.headers().contains_key(AUTH_CONTEXT_HEADER));
+
+        let context = AuthContextV1::anonymous("orders", ["api://orders", "api://admin"])
+            .expect("valid context");
+        let mut request = Request::new(());
+        request.headers_mut().insert(
+            AUTH_CONTEXT_HEADER,
+            encode_auth_context(&context).expect("encodable context"),
+        );
+
+        let result = accept_trusted_ingress(&config, &mut request);
+
+        assert_eq!(result, Err(AuthnRejection::InvalidBoundary));
+        assert!(!request.headers().contains_key(AUTH_CONTEXT_HEADER));
+    }
+
+    struct FixedDecision(AuthDecision);
+
+    impl BrokerTransport for FixedDecision {
+        type AuthenticateFuture<'a> =
+            Pin<Box<dyn Future<Output = Result<AuthDecision, BrokerTransportError>> + 'a>>;
+
+        fn authenticate<'a>(
+            &'a self,
+            _request: &'a AuthnRequestV1,
+            _authorization: &'a str,
+        ) -> Self::AuthenticateFuture<'a> {
+            let decision = self.0.clone();
+            Box::pin(future::ready(Ok(decision)))
+        }
+    }
+
+    fn parse_unauthenticated() -> AuthDecision {
+        wasi_http_policy_core::parse_authn_response(http::StatusCode::UNAUTHORIZED, b"")
     }
 }

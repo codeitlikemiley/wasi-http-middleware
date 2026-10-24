@@ -128,7 +128,7 @@ assert_logs_do_not_contain_secrets \
     "${temporary_directory}/policy.log" \
     "${temporary_directory}/app.log"
 assert_log_occurrences \
-    "$((115 + stream_failure_repeats + immediate_failure_repeats))" \
+    "$((116 + stream_failure_repeats + immediate_failure_repeats))" \
     "wasi-http-middleware-test: terminal-invocation" \
     "${temporary_directory}/app.log"
 

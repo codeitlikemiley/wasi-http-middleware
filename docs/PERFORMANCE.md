@@ -60,12 +60,10 @@ RSS growth.
 HOST=wasmtime bash scripts/soak-runtime.sh
 ```
 
-Spin soak remains non-promoting. Tagged Spin 4.0.2 lacks final
-`wasi:http@0.3.0` resources; pinned Spin main `c34c584` (`4.1.0-pre0`)
-runs plain final terminals and outbound HTTP, but its default CPU-metrics hook
-panics for composed handlers, and native middleware remains RC-only. A
-no-default-features diagnostic is not endurance evidence, so no Spin result is
-currently used to promote the portable middleware performance claim.
+Spin 4.2.5 passes the functional contract for the composed handler and for
+native middleware. That is not endurance evidence. The ten-minute soak remains
+a Wasmtime scheduled gate, and no Spin soak result is used to promote the
+portable middleware performance claim.
 
 ## Streaming performance invariant
 

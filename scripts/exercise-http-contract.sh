@@ -218,15 +218,54 @@ if status != "503" or not 1.5 <= total < 3.5:
     raise SystemExit(f"total policy deadline failed: status={status} total={total}")
 PY
 
-require_status 200 \
-    --http1.1 \
-    --header 'Authorization: Bearer allow' \
-    "${base_url}/trailers"
-if [[ "$(cat "${body_file}")" != "body with trailer" ]]; then
-    echo "error: response body associated with trailers was not preserved" >&2
-    cat "${body_file}" >&2
-    exit 1
-fi
+# Hyper sends HTTP/1.1 trailers only after `TE: trailers`, and only for names
+# declared in the response `Trailer` header. Both outcomes are host-correct.
+python3 - "${base_url}" <<'PY'
+import re
+import socket
+import sys
+from urllib.parse import urlparse
+
+base = urlparse(sys.argv[1])
+
+def exchange(send_te: bool) -> str:
+    headers = [
+        "GET /trailers HTTP/1.1",
+        f"Host: {base.hostname}:{base.port}",
+        "Authorization: Bearer allow",
+        "x-wasi-test-count: 1",
+        "Connection: close",
+    ]
+    if send_te:
+        headers.append("TE: trailers")
+    payload = ("\r\n".join(headers) + "\r\n\r\n").encode()
+    with socket.create_connection((base.hostname, base.port), timeout=10) as sock:
+        sock.sendall(payload)
+        chunks = []
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    return b"".join(chunks).decode("iso-8859-1")
+
+def has_trailer(message: str) -> bool:
+    return any(
+        re.fullmatch(r"x-echo-trailer:[ \t]*preserved", line, re.IGNORECASE)
+        for line in message.splitlines()
+    )
+
+with_te = exchange(True)
+without_te = exchange(False)
+for label, message in (("TE: trailers", with_te), ("no TE", without_te)):
+    if "body with trailer" not in message:
+        raise SystemExit(f"{label}: trailer response lost its body\n{message}")
+if not has_trailer(with_te):
+    raise SystemExit(f"TE: trailers did not deliver x-echo-trailer\n{with_te}")
+if has_trailer(without_te):
+    raise SystemExit(f"HTTP/1.1 delivered x-echo-trailer without TE: trailers\n{without_te}")
+print("HTTP/1.1 trailers arrived with TE: trailers and were omitted without it")
+PY
 
 for attempt in $(seq 1 "${STREAM_FAILURE_REPEATS:-25}"); do
     set +e

@@ -8,6 +8,28 @@ All notable changes are documented here.
   interoperability path rather than a deprecated production fallback.
 - Documented trusted native ingress as the production use of the shared policy,
   metadata, and in-process authentication crates.
+- Canonicalized request IDs, security headers, `Vary` merging, and broker
+  decision hooks through one implementation used by the native
+  `wasi-http-authn` path and the portable components.
+- Cross-origin requests whose method is outside the CORS allowlist now fail
+  closed with 403 and `Vary: Origin` instead of reflecting
+  `Access-Control-Allow-Origin`. Simple browser requests are included.
+- `accept_trusted_ingress` requires the configured audience list to match
+  exactly. HMAC-shaped `wasi-auth` trusted-context envelopes are rejected and
+  are not treated as `AuthContextV1`.
+- Security and CORS response headers are set only when absent. A downstream
+  `Referrer-Policy`, `X-Content-Type-Options`, or `Access-Control-*` policy is
+  preserved. `Vary` is still merged and is not narrowed.
+- Recorded this repository as the canonical middleware source and the removal
+  plan for `wasi-auth`'s vendored `legacy/wasi-http-middleware` copy. See
+  [Canonical ownership](docs/CANONICAL.md).
+- Pinned `wasip3` `0.9.0+wasi-0.3.0` and `wit-bindgen` `0.62.0`. Guest task
+  spawn calls use `wasip3::spawn_local`. The library MSRV is 1.94; the
+  quality-gate compiler is 1.99.0.
+- Behavioral hosts are Wasmtime 50.0.0 and official Spin 4.2.5. Spin serves
+  both the WAC-composed handler and native `dependencies.middleware`.
+  HTTP/1.1 trailers are asserted with `TE: trailers` and asserted absent
+  without it. The echo service declares `Trailer: x-echo-trailer`.
 
 ## [0.2.0-alpha.2] - 2026-07-11
 

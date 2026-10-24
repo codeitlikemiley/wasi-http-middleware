@@ -27,7 +27,12 @@ expect_breaks() {
         echo "expected documented semver breaks for ${package}" >&2
         exit 1
     fi
-    grep -Fq -- "${expected_summary}" "${output}"
+    grep -Fq -- "${expected_summary}" "${output}" || {
+        cat "${output}" >&2
+        rm -f "${output}"
+        echo "semver summary did not match for ${package}: ${expected_summary}" >&2
+        exit 1
+    }
     for symbol in "$@"; do
         grep -Fq -- "${symbol}" "${output}" || {
             cat "${output}" >&2
