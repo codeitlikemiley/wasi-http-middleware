@@ -5,15 +5,24 @@
 The terminal trusts `x-wasi-auth-context` only when every externally reachable
 route passes through the declared component boundary. No second trigger,
 service address, or ingress route may reach it directly. Run
-`audit-spin-manifest.py` for future native Spin manifests; current Spin final-WIT
-fixtures are compatibility canaries, not deployable production manifests.
-Pinned Spin main can run a plain final-WASI terminal, but composed middleware
-on the ordinary build is still blocked and native trigger middleware still
-uses release-candidate WIT.
+`audit-spin-manifest.py` for native Spin manifests. Official Spin 4.2.5 can
+serve the final-WIT chain as a composed handler or through
+`dependencies.middleware`. Those fixtures prove the host contract. They are
+not a production deployment manifest: the terminal still trusts
+`x-wasi-auth-context` only when no other route can reach it.
 
 The context is metadata, not a credential. Middleware first strips the client
 `Authorization` value and every reserved header, then inserts one validated
 context. The terminal must reject the header when composition is not guaranteed.
+
+This context is canonical base64url JSON (`AuthContextV1`). It is not the
+HMAC-SHA-256 envelope produced by `wasi-auth`'s native trusted ingress
+(`base64url(payload).base64url(mac)` in the same `x-wasi-auth-context` header,
+bound to audience, method, path, request ID, and a short replay window).
+`decode_auth_context` and `accept_trusted_ingress` reject that envelope. They
+do not verify its MAC. A guest that needs the signed envelope must use
+`wasi-auth`'s `TrustedContextCodec` and must not treat a successful
+`AuthContextV1` decode as proof of that signature.
 
 ## Responsibilities
 

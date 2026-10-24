@@ -23,7 +23,8 @@ use http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use thiserror::Error;
 use wasi_http_metadata::{AuthContextV1, REQUEST_ID_HEADER, encode_auth_context};
 use wasi_http_policy_core::{
-    AuthDecision, AuthnRequestV1, authorization_value, parse_authn_response,
+    AuthDecision, AuthHookRejection, AuthnRequestV1, accepted_claims, authorization_value,
+    parse_authn_response,
 };
 use wasip3::{
     clocks::monotonic_clock,
@@ -393,8 +394,8 @@ pub async fn authenticate_with_diagnostics(
             );
         }
     };
-    match decision {
-        AuthDecision::Allow(claims) => match (*claims)
+    match accepted_claims(decision) {
+        Ok(claims) => match claims
             .into_context(config.service_id.clone(), config.audiences.clone())
             .and_then(|context| encode_auth_context(&context))
         {
@@ -404,11 +405,11 @@ pub async fn authenticate_with_diagnostics(
                 Some(AuthnDiagnosticStage::ContextEncoding),
             ),
         },
-        AuthDecision::Unauthenticated => (
+        Err(AuthHookRejection::InvalidCredentials) => (
             AuthnOutcome::Reject(AuthnRejection::InvalidCredentials),
             None,
         ),
-        AuthDecision::Unavailable => (
+        Err(AuthHookRejection::Unavailable) => (
             AuthnOutcome::Reject(AuthnRejection::Unavailable),
             Some(AuthnDiagnosticStage::BrokerProtocol),
         ),
@@ -575,6 +576,8 @@ async fn collect_broker_response(
         let (status, chunk) =
             with_deadline(started, timeout_ns, body.read(Vec::with_capacity(8 * 1024))).await?;
         if output.len().saturating_add(chunk.len()) > MAX_BROKER_RESPONSE_SIZE {
+            // Dropping `result_writer` resolves the body-result future with the
+            // error supplied to `wit_future::new`. Trailers are not read.
             return Err(BrokerCallError::ResponseBody);
         }
         output.extend_from_slice(&chunk);

@@ -15,6 +15,10 @@ struct Component;
 wasip3::http::service::export!(Component);
 
 impl wasip3::exports::http::handler::Guest for Component {
+    // The generated handler trait is async. This terminal dispatches to
+    // synchronous response builders and spawned body tasks, so the function
+    // itself has no `.await`.
+    #[allow(unknown_lints, clippy::unused_async_trait_impl)]
     async fn handle(request: Request) -> Result<Response, ErrorCode> {
         if request.get_headers().has("x-wasi-test-count") {
             eprintln!("wasi-http-middleware-test: terminal-invocation");
@@ -119,7 +123,7 @@ fn delayed_response() -> Result<Response, ErrorCode> {
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
     let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let remaining = writer.write_all(b"first\n".to_vec()).await;
         if !remaining.is_empty() {
             return;
@@ -132,7 +136,7 @@ fn delayed_response() -> Result<Response, ErrorCode> {
         }
     });
     let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     Ok(response)
@@ -144,7 +148,7 @@ fn failing_stream_response() -> Result<Response, ErrorCode> {
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
     let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let remaining = writer.write_all(b"partial body\n".to_vec()).await;
         if remaining.is_empty() {
             // Make this an observably mid-stream failure rather than a race
@@ -157,7 +161,7 @@ fn failing_stream_response() -> Result<Response, ErrorCode> {
         }
     });
     let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     Ok(response)
@@ -170,7 +174,7 @@ fn immediate_failure_response() -> Result<Response, ErrorCode> {
     let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
     drop(body_result_writer);
     let (response, transmission_result) = Response::new(headers, None, body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     Ok(response)
@@ -182,7 +186,7 @@ fn trailers_response() -> Result<Response, ErrorCode> {
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();
     let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let remaining = writer.write_all(b"body with trailer\n".to_vec()).await;
         if remaining.is_empty() {
             drop(writer);
@@ -190,7 +194,7 @@ fn trailers_response() -> Result<Response, ErrorCode> {
         }
     });
     let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     Ok(response)
@@ -218,7 +222,7 @@ fn echo_body(request: Request) -> Result<Response, ErrorCode> {
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (response, transmission_result) = Response::new(headers, Some(body), trailers);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let result = transmission_result.await;
         let _write_result = request_result_writer.write(result).await;
     });
@@ -244,7 +248,7 @@ fn response(
         let (mut writer, reader) = wit_stream::new();
         let (body_result_writer, body_result) =
             wit_future::new(|| Err(ErrorCode::InternalError(None)));
-        wasip3::spawn(async move {
+        wasip3::spawn_local(async move {
             let remaining = writer.write_all(body).await;
             if remaining.is_empty() {
                 drop(writer);
@@ -258,7 +262,7 @@ fn response(
         (None, body_result)
     };
     let (response, transmission_result) = Response::new(headers, body, body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     response

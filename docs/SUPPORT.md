@@ -4,16 +4,15 @@ This matrix describes `0.2.0-alpha.3`; it is not a stable-support promise.
 
 | Capability | Status | Notes |
 |---|---|---|
-| Rust MSRV | Tested | Exact Rust 1.93.0 quality-gate toolchain |
+| Rust quality gate | Tested | Exact Rust 1.99.0. Not `stable` |
+| Rust MSRV | Tested | `package.rust-version` 1.94. Host and `wasm32-wasip2` checks compile |
 | Final WASI 0.3 HTTP middleware | Alpha | Exact `wasi:http/middleware@0.3.0` |
-| `wasip3` / `wit-bindgen` | Tested | `wasip3` 0.7.0 with `wit-bindgen` 0.59.0 |
+| `wasip3` / `wit-bindgen` | Tested | `wasip3` `0.9.0+wasi-0.3.0` with one `wit-bindgen` 0.62.0 |
 | Rust build target | Build detail | `wasm32-wasip2` emits the component; public ABI is WASI 0.3 |
-| Wasmtime 46.0.1 | Behavioral host | Composition, security, streaming, parity, concurrency, and soak runners |
-| Spin 4.0.2 | Unsupported canary | Missing final `wasi:http@0.3.0` host resource implementations |
-| Spin main `c34c584...` (`4.1.0-pre0`) terminal | Experimental canary | Final terminal and outbound HTTP work; exact untagged commit, not a support claim |
-| Spin main WAC composition | Blocked upstream | Default CPU-metrics hook panics; no-default-features build is diagnostic only |
-| Spin revision `27451471...` | Unsupported canary | Native middleware remains March-RC WIT and cannot compose final components |
-| WAC-precomposed final chain on Spin | Experimental, blocked | Requires a tagged host plus the composed-handler CPU-accounting fix |
+| Wasmtime 50.0.0 | Behavioral host | Composition, security, streaming, parity, and concurrency runners. Ten-minute soak is scheduled, not part of this change's local run |
+| Spin 4.2.5 composed handler | Tested | Official release serves the WAC-composed final chain |
+| Spin 4.2.5 native middleware | Tested | Official release serves `dependencies.middleware` for these final-WIT components |
+| `spin-sdk` `3cf30012...` | Consumer pin | Not a crate dependency of this workspace |
 | `wasm-bindgen` 0.2.126 | Sibling browser test only | Not used by this server-component workspace or its public ABI |
 | Other final-WASI hosts | ABI candidate | Must pass the complete contract before a support claim |
 | Separate four-component chain | Implemented | Request ID, security, CORS, strict authn |
@@ -21,7 +20,7 @@ This matrix describes `0.2.0-alpha.3`; it is not a stable-support promise.
 | In-process `wasi-http-authn` | Alpha | Trusted-ingress and terminal-broker boundary using typed request extensions |
 | Request/response streaming | Implemented | No application-body collection |
 | Mid-stream frame then error | Implemented | First frame preserved before terminal error; separate immediate-error no-hang gate |
-| Trailers | Forwarded, host-dependent | Attached to body-result future; client exposure depends on host protocol bridge |
+| Trailers | Forwarded, host-dependent | Body is preserved. Spin 4.2.5 writes `x-echo-trailer` on HTTP/2 and omits it on HTTP/1.1. Wasmtime 50.0.0 HTTP/1.1 also omitted it; its HTTP/2 serve path did not complete |
 | CORS preflight | Implemented | Exact allowlists; executes before authn |
 | Required/optional authn | Implemented | Optional applies only to absent credentials |
 | Versioned trusted context | Implemented | Bounded request-only base64url V1 envelope |

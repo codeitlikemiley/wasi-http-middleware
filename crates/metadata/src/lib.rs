@@ -3,6 +3,12 @@
 //! The metadata in this crate is trustworthy only when an application is
 //! reachable exclusively through a composed middleware chain that removes
 //! client-supplied values before inserting one canonical context.
+//!
+//! [`AuthContextV1`] is canonical base64url JSON without padding. It is not
+//! `wasi-auth`'s HMAC-SHA-256 trusted-context envelope
+//! (`base64url(payload).base64url(mac)`). Both formats have been placed in
+//! `x-wasi-auth-context` by different components. This decoder rejects the
+//! signed envelope and does not verify a MAC.
 
 use std::fmt;
 
@@ -1016,6 +1022,23 @@ mod tests {
             let value = HeaderValue::from_str(&URL_SAFE_NO_PAD.encode(json)).expect("header");
             assert!(decode_auth_context(&value).is_err(), "{json}");
         }
+    }
+
+    #[test]
+    fn hmac_signed_wasi_auth_envelope_is_not_auth_context_v1() {
+        let envelope = HeaderValue::from_static("eyJ2ZXJzaW9uIjoxfQ.dGVzdC1zaWduYXR1cmU");
+        assert_eq!(
+            decode_auth_context(&envelope),
+            Err(MetadataError::InvalidEncoding)
+        );
+
+        let payload = br#"{"version":1,"audience":"fullstack-app","method":"GET","path":"/","user_id":"user","issuer":"https://issuer.example","request_id":"request-1"}"#;
+        let encoded = URL_SAFE_NO_PAD.encode(payload);
+        let payload_only = HeaderValue::from_str(&encoded).expect("payload is header-safe");
+        assert_eq!(
+            decode_auth_context(&payload_only),
+            Err(MetadataError::InvalidSchema)
+        );
     }
 
     #[test]

@@ -1,18 +1,31 @@
 # Release process
 
+## Canonical distribution
+
+Publish crates and component artifacts only from this repository. Do not cut a
+parallel bundle from `wasi-auth`'s vendored
+`legacy/wasi-http-middleware` tree. The git tag is `v` plus
+`[release].version` in `compatibility.toml`. Component wasm files, checksums,
+SBOMs, and WIT reports are generated release assets; they are not committed.
+`wasi-auth` must depend on a git revision of this repository rather than a
+second copy of the sources. The removal steps are in
+[Canonical ownership](CANONICAL.md).
+
 ## Compatibility lock
 
 `compatibility.toml` pins Rust, final WIT, `wasip3`, `wit-bindgen`, Wasmtime,
-`wasm-tools`, WAC, Spin canaries, fuzzing, and supply-chain tools. A release
-changes the file and workspace package version together. WIT changes require
-rebuilding every component, regenerating reports/SBOMs/checksums, and rerunning
-all behavioral and incompatibility gates.
+`wasm-tools`, WAC, the Spin release, the consumer `spin-sdk` revision, fuzzing,
+and supply-chain tools. A release changes the file and workspace package
+version together. WIT changes require rebuilding every component, regenerating
+reports/SBOMs/checksums, and rerunning the behavioral gates.
 
-Rust 1.93.0 is the library MSRV. The component crates use `wasip3` 0.7.0 and
-`wit-bindgen` 0.59.0 to export exact final `wasi:http@0.3.0`. Browser-side
+Rust 1.94 is the library MSRV. CI and `rust-toolchain.toml` pin Rust 1.99.0,
+not `stable`. The component crates use `wasip3` `0.9.0+wasi-0.3.0` and
+`wit-bindgen` 0.62.0 to export exact final `wasi:http@0.3.0`. Browser-side
 `wasm-bindgen` is not part of this workspace; 0.2.126 is validated by the
 sibling Leptos browser integration and must not be presented as a server
-component dependency.
+component dependency. The `spin-sdk` git revision in `compatibility.toml` is
+the pin for consumers that import the SDK. This repository does not.
 
 ## Required gates
 
@@ -32,15 +45,11 @@ bash scripts/check-component-contracts.sh
 bash scripts/run-wasmtime-e2e.sh
 bash scripts/run-wasmtime-secure-defaults-e2e.sh
 bash scripts/compare-wasmtime-profiles.sh
-SPIN_COMPAT_PROFILE=stable-final bash scripts/run-spin-e2e.sh
-SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh default)" \
-  SPIN_COMPAT_PROFILE=main-terminal bash scripts/run-spin-e2e.sh
-SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh default)" \
-  SPIN_COMPAT_PROFILE=main-precomposed-default bash scripts/run-spin-e2e.sh
-SPIN_BIN="$(bash scripts/bootstrap-spin-main.sh no-default-features)" \
-  SPIN_COMPAT_PROFILE=main-precomposed-no-cpu bash scripts/run-spin-e2e.sh
-SPIN_COMPAT_PROFILE=native-middleware \
-  SPIN_BIN=/path/to/spin-at-27451471 bash scripts/run-spin-e2e.sh
+SPIN_BIN="$(bash scripts/bootstrap-spin-release.sh)"
+SPIN_COMPAT_PROFILE=release-composed \
+  SPIN_BIN="$SPIN_BIN" bash scripts/run-spin-e2e.sh
+SPIN_COMPAT_PROFILE=release-native \
+  SPIN_BIN="$SPIN_BIN" bash scripts/run-spin-e2e.sh
 CARGO_FUZZ_BIN=/path/to/cargo-fuzz bash scripts/run-fuzz-smoke.sh
 bash scripts/generate-checksums.sh
 bash scripts/generate-sbom.sh
@@ -48,12 +57,10 @@ bash scripts/dry-run-supply-chain.sh
 HOST=wasmtime bash scripts/soak-runtime.sh
 ```
 
-The tagged stable and pinned native-middleware profiles are expected-failure
-canaries. Pinned Spin main `c34c584` has a positive final-terminal check, an
-expected default-build CPU-accounting failure for WAC composition, and a
-positive no-default-features diagnostic. The last result does not qualify a
-production runtime. A support claim requires a tagged Spin release whose
-ordinary build passes the complete behavioral, performance, and soak suites.
+Both Spin profiles are positive gates on the official 4.2.5 release. They do
+not include the ten-minute soak. A support claim still requires that soak, the
+performance budgets, and signed release provenance. HTTP/1.1 response trailers
+remain an upstream host gap on this Spin binary.
 
 Component contracts validate async component-model encoding, exact imports,
 one handler import/export, forbidden capabilities, deterministic WIT reports,

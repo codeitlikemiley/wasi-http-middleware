@@ -21,9 +21,11 @@ use wasi_http_authn_runtime::{
 use wasi_http_metadata::{AUTH_CONTEXT_HEADER, REQUEST_ID_HEADER};
 use wasi_http_middleware_component_support::{
     Header, diagnostic_stage, edit_request_headers, edit_response_headers_from_original,
-    empty_response, generated_request_id, header_values, request_headers, single_header_value,
+    empty_response, generated_request_id, header_values, request_headers,
 };
-use wasi_http_policy_core::{CorsConfig, is_valid_request_id};
+use wasi_http_policy_core::{
+    CorsConfig, SECURITY_RESPONSE_HEADERS, canonicalize_request_id_bytes, vary_value_with_origin,
+};
 use wasip3::{
     cli::environment::get_environment,
     http::types::{ErrorCode, Method, Request, Response},
@@ -174,16 +176,11 @@ fn environment_value<'a>(
 }
 
 fn canonical_request_id(headers: &[Header]) -> Result<String, ErrorCode> {
-    if let Some(value) = single_header_value(headers, REQUEST_ID_HEADER.as_str())
-        && let Ok(value) = std::str::from_utf8(value)
-        && is_valid_request_id(value)
-    {
-        return Ok(value.to_owned());
-    }
-    let generated = generated_request_id();
-    is_valid_request_id(&generated)
-        .then_some(generated)
-        .ok_or(ErrorCode::InternalError(None))
+    canonicalize_request_id_bytes(
+        header_values(headers, REQUEST_ID_HEADER.as_str()),
+        generated_request_id,
+    )
+    .map_err(|_| ErrorCode::InternalError(None))
 }
 
 fn policy_headers(fields: &[Header]) -> Result<HeaderMap, ()> {
@@ -255,13 +252,10 @@ fn finalize_response(
         .collect::<Vec<_>>();
     let cors_replacements = cors_replacements(&original_fields, cors_headers);
     let request_id_header = REQUEST_ID_HEADER;
-    let mut replacements = vec![
-        ("x-content-type-options", b"nosniff".as_slice()),
-        (
-            "referrer-policy",
-            b"strict-origin-when-cross-origin".as_slice(),
-        ),
-    ];
+    let mut replacements = SECURITY_RESPONSE_HEADERS
+        .iter()
+        .map(|(name, value)| (*name, value.as_bytes()))
+        .collect::<Vec<_>>();
     if let Some(request_id) = request_id {
         replacements.push((request_id_header.as_str(), request_id.as_bytes()));
     }
@@ -311,35 +305,7 @@ fn cors_replacements(original: &[Header], source: &HeaderMap) -> Vec<Header> {
 }
 
 fn merged_vary_origin(headers: &[Header]) -> Vec<u8> {
-    let mut tokens = Vec::<String>::new();
-    for value in header_values(headers, VARY_HEADER) {
-        let Ok(value) = std::str::from_utf8(value) else {
-            tokens.clear();
-            break;
-        };
-        for token in value
-            .split(',')
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-        {
-            if token == "*" {
-                return b"*".to_vec();
-            }
-            if !tokens
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(token))
-            {
-                tokens.push(token.to_owned());
-            }
-        }
-    }
-    if !tokens
-        .iter()
-        .any(|token| token.eq_ignore_ascii_case("origin"))
-    {
-        tokens.push("Origin".to_owned());
-    }
-    tokens.join(", ").into_bytes()
+    vary_value_with_origin(header_values(headers, VARY_HEADER))
 }
 
 #[cfg(test)]

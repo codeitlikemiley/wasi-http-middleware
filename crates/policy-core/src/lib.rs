@@ -11,7 +11,7 @@ use http::{
     header::{
         ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS,
         ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_REQUEST_HEADERS,
-        ACCESS_CONTROL_REQUEST_METHOD, ORIGIN, REFERRER_POLICY, VARY,
+        ACCESS_CONTROL_REQUEST_METHOD, ORIGIN, VARY,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -69,23 +69,55 @@ impl RequestIdPolicy {
         headers: &HeaderMap,
         generate: impl FnOnce() -> String,
     ) -> Result<String, PolicyError> {
-        let mut values = headers.get_all(&REQUEST_ID_HEADER).iter();
-        let candidate = values.next();
-        let duplicate = values.next().is_some();
-        if !duplicate
-            && let Some(value) = candidate
-            && let Ok(value) = value.to_str()
-            && is_valid_request_id(value)
-        {
-            return Ok(value.to_owned());
-        }
+        canonicalize_request_id_bytes(
+            headers
+                .get_all(&REQUEST_ID_HEADER)
+                .iter()
+                .map(HeaderValue::as_bytes),
+            generate,
+        )
+    }
+}
 
-        let generated = generate();
-        if is_valid_request_id(&generated) {
-            Ok(generated)
-        } else {
-            Err(PolicyError::InvalidGeneratedRequestId)
-        }
+/// Returns the single canonical request ID, or `None` when the caller must
+/// replace it.
+///
+/// Native header maps and portable WASI field lists both use this predicate.
+/// A missing, duplicated, non-UTF-8, or non-canonical value is `None`.
+pub fn accepted_request_id<'a>(values: impl IntoIterator<Item = &'a [u8]>) -> Option<&'a str> {
+    let mut values = values.into_iter();
+    let candidate = values.next()?;
+    if values.next().is_some() {
+        return None;
+    }
+    let text = std::str::from_utf8(candidate).ok()?;
+    is_valid_request_id(text).then_some(text)
+}
+
+/// Canonicalizes request-ID field values for both `http::HeaderMap` callers
+/// and portable WASI field lists.
+///
+/// # Errors
+///
+/// Returns [`PolicyError::InvalidGeneratedRequestId`] if `generate` does not
+/// produce a canonical value.
+pub fn canonicalize_request_id_bytes(
+    values: impl IntoIterator<Item = impl AsRef<[u8]>>,
+    generate: impl FnOnce() -> String,
+) -> Result<String, PolicyError> {
+    let owned = values
+        .into_iter()
+        .map(|value| value.as_ref().to_vec())
+        .collect::<Vec<_>>();
+    if let Some(value) = accepted_request_id(owned.iter().map(Vec::as_slice)) {
+        return Ok(value.to_owned());
+    }
+
+    let generated = generate();
+    if is_valid_request_id(&generated) {
+        Ok(generated)
+    } else {
+        Err(PolicyError::InvalidGeneratedRequestId)
     }
 }
 
@@ -98,16 +130,59 @@ pub fn is_valid_request_id(value: &str) -> bool {
         })
 }
 
+/// Response headers set by every security-header enforcement path.
+///
+/// Native [`apply_security_headers`] and the portable components both read
+/// this table. HSTS and CSP stay outside this crate: HSTS belongs at the TLS
+/// terminator, and CSP is application-specific.
+pub const SECURITY_RESPONSE_HEADERS: &[(&str, &str)] = &[
+    ("x-content-type-options", "nosniff"),
+    ("referrer-policy", "strict-origin-when-cross-origin"),
+];
+
 /// Applies the fixed baseline security response headers.
 pub fn apply_security_headers(headers: &mut HeaderMap) {
-    headers.insert(
-        HeaderName::from_static("x-content-type-options"),
-        HeaderValue::from_static("nosniff"),
-    );
-    headers.insert(
-        REFERRER_POLICY,
-        HeaderValue::from_static("strict-origin-when-cross-origin"),
-    );
+    for (name, value) in SECURITY_RESPONSE_HEADERS {
+        headers.insert(*name, HeaderValue::from_static(value));
+    }
+}
+
+/// Merges an `Origin` cache key into existing `Vary` field values.
+///
+/// A `*` token is preserved and is not narrowed. A non-UTF-8 field discards
+/// tokens seen so far and stops, so the result is `Origin` unless an earlier
+/// field was already `*`. Portable CORS middleware and `secure-defaults` both
+/// call this function.
+pub fn vary_value_with_origin<'a>(existing: impl IntoIterator<Item = &'a [u8]>) -> Vec<u8> {
+    let mut tokens = Vec::<String>::new();
+    for value in existing {
+        let Ok(value) = std::str::from_utf8(value) else {
+            tokens.clear();
+            break;
+        };
+        for token in value
+            .split(',')
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+        {
+            if token == "*" {
+                return b"*".to_vec();
+            }
+            if !tokens
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(token))
+            {
+                tokens.push(token.to_owned());
+            }
+        }
+    }
+    if !tokens
+        .iter()
+        .any(|token| token.eq_ignore_ascii_case("origin"))
+    {
+        tokens.push("Origin".to_owned());
+    }
+    tokens.join(", ").into_bytes()
 }
 
 /// Validated CORS middleware configuration.
@@ -233,15 +308,49 @@ impl CorsConfig {
             return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
         }
 
+        let is_preflight =
+            method == Method::OPTIONS && headers.contains_key(ACCESS_CONTROL_REQUEST_METHOD);
+        if is_preflight {
+            let requested_method = single_text_header(headers, ACCESS_CONTROL_REQUEST_METHOD)?
+                .ok_or(PolicyError::InvalidHeader)
+                .and_then(|value| {
+                    Method::from_bytes(value.as_bytes()).map_err(|_| PolicyError::InvalidHeader)
+                })?;
+            if !self.methods.contains(&requested_method) {
+                return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
+            }
+
+            let requested_headers = single_text_header(headers, ACCESS_CONTROL_REQUEST_HEADERS)?
+                .map(split_csv)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|header| {
+                    HeaderName::from_bytes(header.as_bytes())
+                        .map_err(|_| PolicyError::InvalidHeader)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if requested_headers
+                .iter()
+                .any(|header| !self.headers.contains(header.as_str()))
+            {
+                return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
+            }
+        } else if !self.methods.contains(method) {
+            // Browsers send simple requests without a preflight. The method
+            // allowlist has to apply to those requests as well, or a GET from
+            // an allowed origin can read a response the operator did not allow.
+            return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
+        }
+
         let mut response_headers = HeaderMap::new();
+        let allow_origin = if self.origins.contains("*") {
+            "*"
+        } else {
+            origin
+        };
         response_headers.insert(
             ACCESS_CONTROL_ALLOW_ORIGIN,
-            HeaderValue::from_str(if self.origins.contains("*") {
-                "*"
-            } else {
-                origin
-            })
-            .map_err(|_| PolicyError::InvalidHeader)?,
+            HeaderValue::from_str(allow_origin).map_err(|_| PolicyError::InvalidHeader)?,
         );
         response_headers.insert(VARY, HeaderValue::from_static("Origin"));
         if self.allow_credentials {
@@ -251,37 +360,11 @@ impl CorsConfig {
             );
         }
 
-        let is_preflight =
-            method == Method::OPTIONS && headers.contains_key(ACCESS_CONTROL_REQUEST_METHOD);
         if !is_preflight {
             return Ok(CorsDecision {
                 response_headers,
                 status: None,
             });
-        }
-
-        let requested_method = single_text_header(headers, ACCESS_CONTROL_REQUEST_METHOD)?
-            .ok_or(PolicyError::InvalidHeader)
-            .and_then(|value| {
-                Method::from_bytes(value.as_bytes()).map_err(|_| PolicyError::InvalidHeader)
-            })?;
-        if !self.methods.contains(&requested_method) {
-            return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
-        }
-
-        let requested_headers = single_text_header(headers, ACCESS_CONTROL_REQUEST_HEADERS)?
-            .map(split_csv)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|header| {
-                HeaderName::from_bytes(header.as_bytes()).map_err(|_| PolicyError::InvalidHeader)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if requested_headers
-            .iter()
-            .any(|header| !self.headers.contains(header.as_str()))
-        {
-            return Ok(CorsDecision::rejected_for_origin(StatusCode::FORBIDDEN));
         }
 
         response_headers.insert(
@@ -534,6 +617,39 @@ pub enum AuthDecision {
     Unauthenticated,
     /// The external authentication broker failed or violated its contract.
     Unavailable,
+}
+
+/// Fail-closed result of applying an authentication policy hook to a broker
+/// decision.
+///
+/// `wasi-http-authn` and the portable `wasi-http-authn-runtime` both use
+/// [`accepted_claims`]. A rejected or unavailable broker response never
+/// becomes anonymous success on only one of those paths.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthHookRejection {
+    /// The broker rejected the supplied credential.
+    InvalidCredentials,
+    /// The broker failed or its success payload was not usable.
+    Unavailable,
+}
+
+/// Converts a broker decision into claims or a shared rejection.
+///
+/// Missing-credential handling stays with the caller: optional mode may skip
+/// the broker only when no credential was supplied. This function is the
+/// overlap after the broker has already been consulted.
+///
+/// # Errors
+///
+/// Returns [`AuthHookRejection::InvalidCredentials`] when the broker rejected
+/// the credential and [`AuthHookRejection::Unavailable`] when the broker failed
+/// or its success payload could not be used.
+pub fn accepted_claims(decision: AuthDecision) -> Result<AuthenticatedClaimsV1, AuthHookRejection> {
+    match decision {
+        AuthDecision::Allow(claims) => Ok(*claims),
+        AuthDecision::Unauthenticated => Err(AuthHookRejection::InvalidCredentials),
+        AuthDecision::Unavailable => Err(AuthHookRejection::Unavailable),
+    }
 }
 
 /// Validates one authorization header without exposing its contents.
@@ -887,5 +1003,269 @@ mod tests {
             authorization_value(&headers),
             Err(PolicyError::DuplicateAuthorization)
         );
+    }
+
+    #[test]
+    fn native_header_map_and_portable_fields_share_request_id_decisions() {
+        let cases = [
+            vec![("x-request-id", &b"request-123"[..])],
+            vec![("x-request-id", &b"one"[..]), ("X-Request-ID", &b"two"[..])],
+            vec![("X-Request-ID", &b"bad id"[..])],
+            vec![("content-type", &b"text/plain"[..])],
+            vec![("x-request-id", &b""[..])],
+        ];
+
+        for pairs in cases {
+            assert_same_request_id(&pairs);
+        }
+        let oversized = "a".repeat(MAX_REQUEST_ID_LEN + 1);
+        assert_same_request_id(&[("x-request-id", oversized.as_bytes())]);
+    }
+
+    fn assert_same_request_id(pairs: &[(&str, &[u8])]) {
+        let mut map = HeaderMap::new();
+        for (name, value) in pairs {
+            if value.is_empty() {
+                continue;
+            }
+            let header_name = HeaderName::from_bytes(name.as_bytes()).expect("fixture header name");
+            map.append(
+                header_name,
+                HeaderValue::from_bytes(value).expect("fixture header value"),
+            );
+        }
+        let from_map = RequestIdPolicy
+            .canonicalize(&map, || "generated".to_owned())
+            .expect("generator is canonical");
+        let field_values = pairs
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case(REQUEST_ID_HEADER.as_str()))
+            .map(|(_, value)| *value);
+        let from_fields = canonicalize_request_id_bytes(field_values, || "generated".to_owned())
+            .expect("generator is canonical");
+        assert_eq!(from_map, from_fields, "{pairs:?}");
+        let borrowed = accepted_request_id(
+            map.get_all(REQUEST_ID_HEADER)
+                .iter()
+                .map(HeaderValue::as_bytes),
+        );
+        match borrowed {
+            Some(value) => assert_eq!(from_map, value),
+            None => assert_eq!(from_map, "generated"),
+        }
+    }
+
+    #[test]
+    fn security_header_table_matches_header_map_application() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-content-type-options", HeaderValue::from_static("unsafe"));
+        headers.insert("referrer-policy", HeaderValue::from_static("unsafe-url"));
+
+        apply_security_headers(&mut headers);
+
+        for (name, value) in SECURITY_RESPONSE_HEADERS {
+            assert_eq!(headers[*name], *value);
+        }
+        assert_eq!(headers.len(), SECURITY_RESPONSE_HEADERS.len());
+    }
+
+    #[test]
+    fn vary_merge_preserves_tokens_and_does_not_narrow_wildcard() {
+        assert_eq!(
+            vary_value_with_origin([b"Accept-Encoding".as_slice()]),
+            b"Accept-Encoding, Origin"
+        );
+        assert_eq!(
+            vary_value_with_origin([b"Accept-Encoding".as_slice(), b"Accept-Language".as_slice()]),
+            b"Accept-Encoding, Accept-Language, Origin"
+        );
+        assert_eq!(vary_value_with_origin([b"*".as_slice()]), b"*");
+        assert_eq!(vary_value_with_origin([b"origin".as_slice()]), b"origin");
+        assert_eq!(
+            vary_value_with_origin([b"Accept-Encoding".as_slice(), b"\xff".as_slice()]),
+            b"Origin"
+        );
+        assert_eq!(
+            vary_value_with_origin([b"*".as_slice(), b"\xff".as_slice()]),
+            b"*"
+        );
+    }
+
+    #[test]
+    fn cors_credentials_reflect_the_exact_origin_and_vary() {
+        let config = CorsConfig::new(
+            ["https://app.example"],
+            ["GET", "POST"],
+            ["content-type"],
+            true,
+        )
+        .expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://app.example"));
+
+        let decision = config
+            .evaluate(&Method::GET, &headers)
+            .expect("valid request");
+
+        assert_eq!(decision.status(), None);
+        assert_eq!(
+            decision.response_headers()[ACCESS_CONTROL_ALLOW_ORIGIN],
+            "https://app.example"
+        );
+        assert_eq!(
+            decision.response_headers()[ACCESS_CONTROL_ALLOW_CREDENTIALS],
+            "true"
+        );
+        assert_eq!(decision.response_headers()[VARY], "Origin");
+    }
+
+    #[test]
+    fn cors_wildcard_origin_does_not_reflect_or_allow_credentials() {
+        let config =
+            CorsConfig::new(["*"], ["GET"], ["content-type"], false).expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://evil.example"));
+
+        let decision = config
+            .evaluate(&Method::GET, &headers)
+            .expect("valid request");
+
+        assert_eq!(
+            decision.response_headers()[ACCESS_CONTROL_ALLOW_ORIGIN],
+            "*"
+        );
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_CREDENTIALS)
+        );
+        assert_eq!(decision.response_headers()[VARY], "Origin");
+    }
+
+    #[test]
+    fn cors_denies_cross_origin_method_outside_the_allowlist() {
+        let config = CorsConfig::new(["https://app.example"], ["POST"], ["content-type"], false)
+            .expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://app.example"));
+
+        let decision = config
+            .evaluate(&Method::GET, &headers)
+            .expect("valid request");
+
+        assert_eq!(decision.status(), Some(StatusCode::FORBIDDEN));
+        assert_eq!(decision.response_headers()[VARY], "Origin");
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_ORIGIN)
+        );
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_CREDENTIALS)
+        );
+    }
+
+    #[test]
+    fn cors_same_origin_omission_ignores_the_method_allowlist() {
+        let config = CorsConfig::new(["https://app.example"], ["POST"], ["content-type"], false)
+            .expect("valid fixture");
+
+        let decision = config
+            .evaluate(&Method::DELETE, &HeaderMap::new())
+            .expect("valid request");
+
+        assert_eq!(decision.status(), None);
+        assert!(decision.response_headers().is_empty());
+    }
+
+    #[test]
+    fn cors_preflight_denies_headers_outside_the_allowlist() {
+        let config = CorsConfig::new(["https://app.example"], ["POST"], ["content-type"], true)
+            .expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://app.example"));
+        headers.insert(
+            ACCESS_CONTROL_REQUEST_METHOD,
+            HeaderValue::from_static("POST"),
+        );
+        headers.insert(
+            ACCESS_CONTROL_REQUEST_HEADERS,
+            HeaderValue::from_static("x-custom"),
+        );
+
+        let decision = config
+            .evaluate(&Method::OPTIONS, &headers)
+            .expect("valid request");
+
+        assert_eq!(decision.status(), Some(StatusCode::FORBIDDEN));
+        assert_eq!(decision.response_headers()[VARY], "Origin");
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_ORIGIN)
+        );
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_CREDENTIALS)
+        );
+    }
+
+    #[test]
+    fn cors_star_request_header_is_literal_not_a_wildcard() {
+        let config = CorsConfig::new(["https://app.example"], ["POST"], ["*"], false)
+            .expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://app.example"));
+        headers.insert(
+            ACCESS_CONTROL_REQUEST_METHOD,
+            HeaderValue::from_static("POST"),
+        );
+        headers.insert(
+            ACCESS_CONTROL_REQUEST_HEADERS,
+            HeaderValue::from_static("content-type"),
+        );
+
+        let decision = config
+            .evaluate(&Method::OPTIONS, &headers)
+            .expect("valid request");
+
+        assert_eq!(decision.status(), Some(StatusCode::FORBIDDEN));
+    }
+
+    #[test]
+    fn cors_rejection_does_not_echo_a_denied_origin() {
+        let config = CorsConfig::new(["https://allowed.example"], ["GET"], ["content-type"], true)
+            .expect("valid fixture");
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://denied.example"));
+
+        let decision = config
+            .evaluate(&Method::GET, &headers)
+            .expect("valid request");
+
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_ORIGIN)
+        );
+        assert!(
+            !decision
+                .response_headers()
+                .contains_key(ACCESS_CONTROL_ALLOW_CREDENTIALS)
+        );
+    }
+
+    #[test]
+    fn broker_hook_rejects_unauthenticated_and_unavailable_decisions() {
+        let unauthenticated = accepted_claims(parse_authn_response(StatusCode::UNAUTHORIZED, b""));
+        let unavailable = accepted_claims(parse_authn_response(StatusCode::FORBIDDEN, b""));
+        let malformed = accepted_claims(parse_authn_response(StatusCode::OK, b"{}"));
+
+        assert_eq!(unauthenticated, Err(AuthHookRejection::InvalidCredentials));
+        assert_eq!(unavailable, Err(AuthHookRejection::Unavailable));
+        assert_eq!(malformed, Err(AuthHookRejection::Unavailable));
     }
 }

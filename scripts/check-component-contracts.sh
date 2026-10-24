@@ -79,75 +79,69 @@ check_component_capabilities() {
     esac
 }
 
+# `wasm32-wasip2` links the Rust/WASIp3 adapter. wasip3 0.9 emits that
+# adapter at WASI 0.2.12. Those imports are not middleware policy imports.
+adapter_imports() {
+    local adapter="$1"
+    cat <<EOF
+wasi:cli/environment@${adapter}
+wasi:cli/exit@${adapter}
+wasi:cli/stderr@${adapter}
+wasi:cli/stdin@${adapter}
+wasi:cli/stdout@${adapter}
+wasi:cli/terminal-input@${adapter}
+wasi:cli/terminal-output@${adapter}
+wasi:cli/terminal-stderr@${adapter}
+wasi:cli/terminal-stdin@${adapter}
+wasi:cli/terminal-stdout@${adapter}
+wasi:clocks/monotonic-clock@${adapter}
+wasi:io/error@${adapter}
+wasi:io/poll@${adapter}
+wasi:io/streams@${adapter}
+EOF
+}
+
 check_exact_imports() {
     local component="$1"
     local report="$2"
     local expected="${report}.expected-imports"
     local actual="${report}.actual-imports"
+    local adapter
+    adapter="$(compat_value wasi_p2_adapter)"
 
     grep -E '^[[:space:]]+import ' "${report}" | sed -E 's/^[[:space:]]+import //; s/;$//' | LC_ALL=C sort >"${actual}"
+    adapter_imports "${adapter}" >"${expected}"
     case "${component}" in
-        passthrough)
-            cat >"${expected}" <<EOF
-wasi:cli/environment@0.2.6
-wasi:cli/exit@0.2.6
-wasi:cli/stderr@0.2.6
+        passthrough|security-headers)
+            cat >>"${expected}" <<EOF
 wasi:http/handler@${wasi_http_version}
 wasi:http/types@${wasi_http_version}
-wasi:io/error@0.2.6
-wasi:io/streams@0.2.6
-EOF
-            ;;
-        security-headers)
-            cat >"${expected}" <<EOF
-wasi:cli/environment@0.2.6
-wasi:cli/exit@0.2.6
-wasi:cli/stderr@0.2.6
-wasi:http/handler@${wasi_http_version}
-wasi:http/types@${wasi_http_version}
-wasi:io/error@0.2.6
-wasi:io/streams@0.2.6
 EOF
             ;;
         request-id)
-            cat >"${expected}" <<EOF
-wasi:cli/environment@0.2.6
-wasi:cli/exit@0.2.6
-wasi:cli/stderr@0.2.6
+            cat >>"${expected}" <<EOF
 wasi:http/handler@${wasi_http_version}
 wasi:http/types@${wasi_http_version}
-wasi:io/error@0.2.6
-wasi:io/streams@0.2.6
 wasi:random/random@${wasi_http_version}
 EOF
             ;;
         cors)
-            cat >"${expected}" <<EOF
-wasi:cli/environment@0.2.6
+            cat >>"${expected}" <<EOF
 wasi:cli/environment@${wasi_http_version}
-wasi:cli/exit@0.2.6
-wasi:cli/stderr@0.2.6
 wasi:http/handler@${wasi_http_version}
 wasi:http/types@${wasi_http_version}
-wasi:io/error@0.2.6
-wasi:io/streams@0.2.6
-wasi:random/insecure-seed@0.2.6
+wasi:random/insecure-seed@${adapter}
 EOF
             ;;
         authn-policy|secure-defaults)
-            cat >"${expected}" <<EOF
-wasi:cli/environment@0.2.6
+            cat >>"${expected}" <<EOF
 wasi:cli/environment@${wasi_http_version}
-wasi:cli/exit@0.2.6
-wasi:cli/stderr@0.2.6
 wasi:clocks/monotonic-clock@${wasi_http_version}
 wasi:clocks/types@${wasi_http_version}
 wasi:http/client@${wasi_http_version}
 wasi:http/handler@${wasi_http_version}
 wasi:http/types@${wasi_http_version}
-wasi:io/error@0.2.6
-wasi:io/streams@0.2.6
-wasi:random/insecure-seed@0.2.6
+wasi:random/insecure-seed@${adapter}
 wasi:random/random@${wasi_http_version}
 EOF
             ;;

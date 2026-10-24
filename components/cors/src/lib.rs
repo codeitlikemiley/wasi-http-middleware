@@ -10,7 +10,7 @@ use wasi_http_middleware_component_support::{
     Header, empty_response, from_header_map, header_values, remove_header,
     replace_response_headers, request_headers, response_headers, set_header, to_header_map,
 };
-use wasi_http_policy_core::CorsConfig;
+use wasi_http_policy_core::{CorsConfig, vary_value_with_origin};
 use wasip3::{
     cli::environment::get_environment,
     http::types::{ErrorCode, Method, Request, Response},
@@ -139,36 +139,8 @@ fn merge_cors_headers(target: &mut Vec<Header>, source: &http::HeaderMap) {
 }
 
 fn merge_vary_origin(headers: &mut Vec<Header>) {
-    let mut tokens = Vec::<String>::new();
-    for value in header_values(headers, VARY_HEADER) {
-        let Ok(value) = std::str::from_utf8(value) else {
-            tokens.clear();
-            break;
-        };
-        for token in value
-            .split(',')
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-        {
-            if token == "*" {
-                set_header(headers, VARY_HEADER, b"*".as_slice());
-                return;
-            }
-            if !tokens
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(token))
-            {
-                tokens.push(token.to_owned());
-            }
-        }
-    }
-    if !tokens
-        .iter()
-        .any(|token| token.eq_ignore_ascii_case("origin"))
-    {
-        tokens.push("Origin".to_owned());
-    }
-    set_header(headers, VARY_HEADER, tokens.join(", ").into_bytes());
+    let merged = vary_value_with_origin(header_values(headers, VARY_HEADER));
+    set_header(headers, VARY_HEADER, merged);
 }
 
 #[cfg(test)]

@@ -162,7 +162,7 @@ fn slow_policy_response() -> Result<Response, ErrorCode> {
     let chunks = body.chunks(10).map(<[u8]>::to_vec).collect::<Vec<_>>();
     let (mut writer, reader) = wit_stream::new();
     let (body_result_writer, body_result) = wit_future::new(|| Err(ErrorCode::InternalError(None)));
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         for (index, chunk) in chunks.into_iter().enumerate() {
             if index > 0 {
                 wait_for(400_000_000).await;
@@ -176,7 +176,7 @@ fn slow_policy_response() -> Result<Response, ErrorCode> {
         let _write_result = body_result_writer.write(Ok(None)).await;
     });
     let (response, transmission_result) = Response::new(headers, Some(reader), body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     Ok(response)
@@ -197,7 +197,7 @@ fn response(status: u16, body: Option<Vec<u8>>) -> Result<Response, ErrorCode> {
         let (mut writer, reader) = wit_stream::new();
         let (body_result_writer, body_result) =
             wit_future::new(|| Err(ErrorCode::InternalError(None)));
-        wasip3::spawn(async move {
+        wasip3::spawn_local(async move {
             let remaining = writer.write_all(body).await;
             if remaining.is_empty() {
                 drop(writer);
@@ -211,7 +211,7 @@ fn response(status: u16, body: Option<Vec<u8>>) -> Result<Response, ErrorCode> {
         (None, body_result)
     };
     let (response, transmission_result) = Response::new(headers, body, body_result);
-    wasip3::spawn(async move {
+    wasip3::spawn_local(async move {
         let _result = transmission_result.await;
     });
     response

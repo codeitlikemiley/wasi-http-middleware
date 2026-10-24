@@ -38,6 +38,13 @@ Portable components contain no Leptos or Spin SDK dependency. Production
 deployments use the shared policy and metadata crates in a trusted native
 ingress; guest components remain experimental.
 
+Request-ID acceptance, the security-header table, CORS `Vary` merging, and
+broker-decision classification live in `wasi-http-policy-core`. Native
+`wasi-http-authn` and the portable components call those functions rather than
+keeping a second copy. `AuthContextV1` remains the unsigned base64url context
+from this workspace. It is a different credential from `wasi-auth`'s
+HMAC-SHA-256 trusted-context envelope.
+
 ## Streaming invariant
 
 Application request and response bodies are never collected by middleware.
@@ -73,13 +80,11 @@ public unless the CDN/fileserver/ingress explicitly protects them.
 
 ## Host and trigger boundary
 
-Wasmtime 46.0.1 runs the final WASI 0.3 behavioral suite. Tagged Spin 4.0.2
-lacks final `wasi:http@0.3.0` resource implementations. Pinned Spin main
-`c34c584` (`4.1.0-pre0`) runs the final terminal and outbound HTTP, but its
-default CPU-metrics hook panics for WAC-composed handlers. A
-no-default-features build proves the composition path only as a diagnostic;
-the pinned native-middleware commit still targets the March RC. These remain
-distinct compatibility canaries rather than one broad Spin support claim.
+Wasmtime 50.0.0 runs the final WASI 0.3 behavioral suite. Official Spin 4.2.5
+serves the same `wasi:http/handler@0.3.0` chain both as one WAC-composed
+component and through native `dependencies.middleware`. The July Spin fork is
+not a host. HTTP/1.1 response trailers are still a host gap on Spin 4.2.5;
+HTTP/2 on that binary writes them.
 
 HTTP middleware cannot wrap Redis, MQTT, cron, or custom triggers because they
 export different WIT worlds. Future adapters may reuse pure policy crates, but

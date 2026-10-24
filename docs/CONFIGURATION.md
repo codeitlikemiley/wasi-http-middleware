@@ -34,8 +34,15 @@ at the TLS terminator.
 
 Origins are exact serialized `http`/`https` origins (or explicit `null`). `*`
 cannot be combined with credentials. A valid preflight returns 204 before
-authentication. Origin-dependent responses include `Vary: Origin` without
-discarding existing Vary tokens.
+authentication. A cross-origin request whose method is not in the method
+allowlist is rejected with 403 and `Vary: Origin` and does not receive
+`Access-Control-Allow-Origin`, including browser simple requests that never
+preflight. Requests with no `Origin` are not CORS requests and are not
+method-filtered here. Header allowlists are exact; `*` is a literal header
+name, not a wildcard. Origin-dependent responses include `Vary: Origin`
+without discarding existing Vary tokens. Credentialed allows reflect the
+request origin, set `Access-Control-Allow-Credentials: true`, and never use
+`*`.
 
 ## Authentication broker
 
@@ -114,7 +121,9 @@ broker trailers are dropped.
 
 On pass, middleware removes `Authorization` and every inbound
 `x-wasi-auth-*` field, then inserts exactly one `x-wasi-auth-context`. The value
-is bounded canonical base64url-without-padding JSON, version 1. Anonymous
+is bounded canonical base64url-without-padding JSON, version 1. This is not
+`wasi-auth`'s HMAC-SHA-256 envelope, which uses the same header name.
+Anonymous
 contexts contain no principal/decision. Authenticated contexts bind immutable
 service/audiences to validated broker claims. Every response removes the
 reserved prefix so the context never becomes browser-visible.

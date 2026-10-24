@@ -3,10 +3,10 @@
 #![deny(missing_docs)]
 
 use wasi_http_middleware_component_support::{
-    generated_request_id, replace_request_headers, replace_response_headers, request_headers,
-    response_headers, set_header, single_header_value,
+    generated_request_id, header_values, replace_request_headers, replace_response_headers,
+    request_headers, response_headers, set_header,
 };
-use wasi_http_policy_core::is_valid_request_id;
+use wasi_http_policy_core::canonicalize_request_id_bytes;
 use wasip3::http::types::{ErrorCode, Request, Response};
 
 #[allow(unknown_lints, missing_docs, clippy::same_length_and_capacity)]
@@ -36,13 +36,11 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
 }
 
 fn canonical_request_id(headers: &[(String, Vec<u8>)]) -> String {
-    if let Some(value) = single_header_value(headers, REQUEST_ID_HEADER)
-        && let Ok(value) = std::str::from_utf8(value)
-        && is_valid_request_id(value)
-    {
-        return value.to_owned();
-    }
-    generated_request_id()
+    canonicalize_request_id_bytes(
+        header_values(headers, REQUEST_ID_HEADER),
+        generated_request_id,
+    )
+    .unwrap_or_else(|_| generated_request_id())
 }
 
 #[cfg(test)]
