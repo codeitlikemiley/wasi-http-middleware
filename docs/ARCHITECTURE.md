@@ -83,8 +83,8 @@ public unless the CDN/fileserver/ingress explicitly protects them.
 Wasmtime 50.0.0 runs the final WASI 0.3 behavioral suite. Official Spin 4.2.5
 serves the same `wasi:http/handler@0.3.0` chain both as one WAC-composed
 component and through native `dependencies.middleware`. The July Spin fork is
-not a host. HTTP/1.1 response trailers are still a host gap on Spin 4.2.5;
-HTTP/2 on that binary writes them.
+not a host. HTTP/1.1 trailers are delivered when the client sends
+`TE: trailers`; HTTP/2 on Spin 4.2.5 writes them without that field.
 
 HTTP middleware cannot wrap Redis, MQTT, cron, or custom triggers because they
 export different WIT worlds. Future adapters may reuse pure policy crates, but

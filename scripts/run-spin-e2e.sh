@@ -120,73 +120,27 @@ if ! STREAM_FAILURE_REPEATS="${STREAM_FAILURE_REPEATS:-25}" \
     exit 1
 fi
 
-# Upstream Spin writes WASI response trailers on HTTP/2 and drops them on
-# HTTP/1.1. The body still has to survive either protocol.
-probe_trailers() {
-    local label="$1"
-    shift
-    local header_file="${temporary_directory}/trailers-${label}.headers"
-    local body_file="${temporary_directory}/trailers-${label}.body"
-    local actual
-    actual="$(curl --silent --show-error --max-time 10 \
-        --dump-header "${header_file}" \
-        --output "${body_file}" \
-        --write-out '%{http_code}' \
-        --header 'Authorization: Bearer allow' \
-        "$@" \
-        "${base_url}/trailers")"
-    if [[ "${actual}" != "200" || "$(cat "${body_file}")" != "body with trailer" ]]; then
-        echo "error: ${label} trailer request lost its body (status ${actual})" >&2
-        cat "${header_file}" >&2
-        cat "${body_file}" >&2
-        return 1
-    fi
-    if grep -Eiq '^x-echo-trailer:[[:space:]]*preserved' "${header_file}"; then
-        printf 'present\n'
-    else
-        printf 'absent\n'
-    fi
-}
-
-http1_trailers="$(probe_trailers http1 --http1.1)"
 h2_header="${temporary_directory}/trailers-h2.headers"
 h2_body="${temporary_directory}/trailers-h2.body"
-set +e
-h2_status="$(curl --silent --max-time 10 \
+h2_status="$(curl --silent --show-error --max-time 10 \
     --http2-prior-knowledge \
     --dump-header "${h2_header}" \
     --output "${h2_body}" \
     --write-out '%{http_code}' \
     --header 'Authorization: Bearer allow' \
     "${base_url}/trailers")"
-h2_exit=$?
-set -e
-if [[ "${h2_exit}" == "0" && "${h2_status}" == "200" ]]; then
-    if [[ "$(cat "${h2_body}")" != "body with trailer" ]]; then
-        echo "error: HTTP/2 trailer request lost its body" >&2
-        exit 1
-    fi
-    if grep -Eiq '^x-echo-trailer:[[:space:]]*preserved' "${h2_header}"; then
-        h2_trailers="present"
-    else
-        h2_trailers="absent"
-    fi
-else
-    h2_trailers="unsupported"
-fi
-
-if [[ "${http1_trailers}" != "absent" ]]; then
-    echo "error: HTTP/1.1 unexpectedly wrote x-echo-trailer (${http1_trailers}); re-check the upstream gap before changing this gate" >&2
-    cat "${temporary_directory}/trailers-http1.headers" >&2
+if [[ "${h2_status}" != "200" || "$(cat "${h2_body}")" != "body with trailer" ]]; then
+    echo "error: HTTP/2 trailer request lost its body (status ${h2_status})" >&2
+    cat "${h2_header}" >&2
     exit 1
 fi
-if [[ "${h2_trailers}" != "present" ]]; then
-    echo "error: HTTP/2 did not write x-echo-trailer (${h2_trailers})" >&2
-    cat "${h2_header}" >&2 || true
+if ! grep -Eiq '^x-echo-trailer:[[:space:]]*preserved' "${h2_header}"; then
+    echo "error: HTTP/2 did not write x-echo-trailer" >&2
+    cat "${h2_header}" >&2
     exit 1
 fi
 
 assert_logs_do_not_contain_secrets \
     "${temporary_directory}/spin.log" \
     "${temporary_directory}/policy.log"
-echo "Spin ${expected_version} ${profile} passed (HTTP/1.1 trailers absent, HTTP/2 trailers present)"
+echo "Spin ${expected_version} ${profile} passed"

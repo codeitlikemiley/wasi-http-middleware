@@ -28,15 +28,18 @@ source build. Two profiles are positive gates:
 
 Both profiles run the shared HTTP contract, including request IDs, CORS,
 security headers, required authentication, streaming bodies, and cancellation.
-HTTP/2 prior knowledge on this release writes `x-echo-trailer`. A curl
-`--trace-ascii` capture of the same response over HTTP/1.1 shows the body and
-no trailer bytes. That HTTP/1.1 omission is an upstream host gap; HTTP/2 on
-this binary does write the trailer.
+HTTP/1.1 trailers follow Hyper 1.11 and RFC 9110 §6.5.1: the response declares
+`Trailer: x-echo-trailer`, a request with `TE: trailers` receives
+`x-echo-trailer: preserved`, and the same response omits that field when `TE`
+is absent. That is the contract, not a host defect.
 
-`wasmtime serve` 50.0.0 also omitted the trailer on HTTP/1.1. An HTTP/2 prior
-knowledge request to that server closed before a response, so Wasmtime's
-HTTP/2 trailer behavior is unverified here. The shared contract still requires
-the trailer-associated body on HTTP/1.1 for both hosts.
+Spin 4.2.5 also writes `x-echo-trailer` on HTTP/2 prior knowledge. `wasmtime
+serve` 50.0.0 does not complete that request. With either
+`-W component-model-async=y -S p3=y -S cli=y -S http=y` or
+`-S cli,http,p3 -W component-model-async,component-model-error-context`, the
+server logs `hyper::Error(Parse(VersionH2))` and curl exits 56. Wasmtime
+HTTP/2 trailers are unverified because this `serve` command rejects the
+HTTP/2 preface.
 
 Building `codeitlikemiley/spin` is not a gate. `scripts/bootstrap-spin-main.sh`
 refuses that path. `scripts/bootstrap-spin-release.sh` downloads

@@ -59,8 +59,8 @@ HOST=wasmtime bash scripts/soak-runtime.sh
 
 Both Spin profiles are positive gates on the official 4.2.5 release. They do
 not include the ten-minute soak. A support claim still requires that soak, the
-performance budgets, and signed release provenance. HTTP/1.1 response trailers
-remain an upstream host gap on this Spin binary.
+performance budgets, and signed release provenance. HTTP/1.1 trailers are part
+of the shared contract: present with `TE: trailers`, omitted without it.
 
 Component contracts validate async component-model encoding, exact imports,
 one handler import/export, forbidden capabilities, deterministic WIT reports,

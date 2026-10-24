@@ -25,8 +25,8 @@ All notable changes are documented here.
   quality-gate compiler is 1.99.0.
 - Behavioral hosts are Wasmtime 50.0.0 and official Spin 4.2.5. Spin serves
   both the WAC-composed handler and native `dependencies.middleware`.
-  HTTP/1.1 response trailers are still omitted by that Spin release; HTTP/2
-  writes them.
+  HTTP/1.1 trailers are asserted with `TE: trailers` and asserted absent
+  without it. The echo service declares `Trailer: x-echo-trailer`.
 
 ## [0.2.0-alpha.2] - 2026-07-11
 

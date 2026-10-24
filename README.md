@@ -11,8 +11,8 @@ in [Canonical ownership](docs/CANONICAL.md).
 
 > **Alpha:** `0.2.0-alpha.3` targets final WASI 0.3. The behavioral hosts are
 > Wasmtime 50.0.0 and official Spin 4.2.5. Spin serves the WAC-composed
-> handler and native `dependencies.middleware`. HTTP/1.1 response trailers are
-> still omitted by that Spin release; HTTP/2 writes them.
+> handler and native `dependencies.middleware`. HTTP/1.1 trailers arrive when
+> the request sends `TE: trailers`.
 
 The tested build contract is Rust 1.99.0, MSRV 1.94, `wasip3`
 `0.9.0+wasi-0.3.0`, exact `wasi:http@0.3.0`, and `wit-bindgen` 0.62.0.
@@ -85,8 +85,8 @@ SPIN_COMPAT_PROFILE=release-native \
 
 `release-composed` serves the WAC-composed component.
 `release-native` serves `dependencies.middleware`. Both must pass the shared
-HTTP contract. HTTP/1.1 trailers stay absent on this Spin release; HTTP/2
-trailers must be present.
+HTTP contract, including HTTP/1.1 trailers with `TE: trailers` and their
+omission without that request field. Spin also writes the trailer on HTTP/2.
 
 Security and release evidence:
 

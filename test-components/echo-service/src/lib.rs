@@ -181,7 +181,12 @@ fn immediate_failure_response() -> Result<Response, ErrorCode> {
 }
 
 fn trailers_response() -> Result<Response, ErrorCode> {
-    let fields = vec![("content-type".to_owned(), b"text/plain".to_vec())];
+    // Hyper 1.11 writes HTTP/1.1 trailers only for names declared here, and
+    // only when the request included `TE: trailers` (RFC 9110 §6.5.1).
+    let fields = vec![
+        ("content-type".to_owned(), b"text/plain".to_vec()),
+        ("trailer".to_owned(), b"x-echo-trailer".to_vec()),
+    ];
     let headers =
         Headers::from_list(&fields).map_err(|_| ErrorCode::HttpResponseHeaderSectionSize(None))?;
     let (mut writer, reader) = wit_stream::new();

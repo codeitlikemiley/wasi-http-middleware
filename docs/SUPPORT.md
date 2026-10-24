@@ -20,7 +20,7 @@ This matrix describes `0.2.0-alpha.3`; it is not a stable-support promise.
 | In-process `wasi-http-authn` | Alpha | Trusted-ingress and terminal-broker boundary using typed request extensions |
 | Request/response streaming | Implemented | No application-body collection |
 | Mid-stream frame then error | Implemented | First frame preserved before terminal error; separate immediate-error no-hang gate |
-| Trailers | Forwarded, host-dependent | Body is preserved. Spin 4.2.5 writes `x-echo-trailer` on HTTP/2 and omits it on HTTP/1.1. Wasmtime 50.0.0 HTTP/1.1 also omitted it; its HTTP/2 serve path did not complete |
+| Trailers | Forwarded | Body is preserved. HTTP/1.1 fields arrive only with `TE: trailers` and a declared `Trailer` name. Spin 4.2.5 also writes them on HTTP/2. Wasmtime 50 `serve` rejects the HTTP/2 preface (`Parse(VersionH2)`) |
 | CORS preflight | Implemented | Exact allowlists; executes before authn |
 | Required/optional authn | Implemented | Optional applies only to absent credentials |
 | Versioned trusted context | Implemented | Bounded request-only base64url V1 envelope |
