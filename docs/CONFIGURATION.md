@@ -13,15 +13,17 @@ component instance obtains one random 128-bit prefix, then appends a monotonic
 64-bit sequence. The value is unique within that instance until the sequence
 wraps and is a correlation identifier, never a credential.
 
-`security-headers` has no configuration and sets:
+`security-headers` has no configuration. It sets each baseline field only when
+that field is absent. An existing value is preserved, including a downstream
+`Referrer-Policy` other than the baseline.
 
-| Header | Value |
+| Header | Value written when absent |
 |---|---|
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 
 CSP is application-specific, especially for islands/split Wasm. HSTS belongs
-at the TLS terminator.
+at the TLS terminator. This middleware never writes either header.
 
 ## CORS
 
@@ -40,9 +42,12 @@ allowlist is rejected with 403 and `Vary: Origin` and does not receive
 preflight. Requests with no `Origin` are not CORS requests and are not
 method-filtered here. Header allowlists are exact; `*` is a literal header
 name, not a wildcard. Origin-dependent responses include `Vary: Origin`
-without discarding existing Vary tokens. Credentialed allows reflect the
-request origin, set `Access-Control-Allow-Credentials: true`, and never use
-`*`.
+without discarding existing Vary tokens and without narrowing `*`.
+Credentialed allows reflect the request origin, set
+`Access-Control-Allow-Credentials: true`, and never use `*`. If the downstream
+response already has any `Access-Control-*` field, those fields are left
+unchanged and no additional `Access-Control-*` field is added. `Vary` is still
+merged.
 
 ## Authentication broker
 

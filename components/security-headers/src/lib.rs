@@ -2,10 +2,8 @@
 
 #![deny(missing_docs)]
 
-use wasi_http_middleware_component_support::{
-    replace_response_headers, response_headers, set_header,
-};
-use wasi_http_policy_core::SECURITY_RESPONSE_HEADERS;
+use wasi_http_middleware_component_support::{replace_response_headers, response_headers};
+use wasi_http_policy_core::apply_security_headers_to_fields;
 use wasip3::http::types::{ErrorCode, Request, Response};
 
 #[allow(unknown_lints, missing_docs, clippy::same_length_and_capacity)]
@@ -23,9 +21,7 @@ impl bindings::exports::wasi::http::handler::Guest for Component {
     async fn handle(request: Request) -> Result<Response, ErrorCode> {
         let response = handler::handle(request).await?;
         let mut headers = response_headers(&response);
-        for (name, value) in SECURITY_RESPONSE_HEADERS {
-            set_header(&mut headers, name, value.as_bytes());
-        }
+        apply_security_headers_to_fields(&mut headers);
         replace_response_headers(response, &headers)
     }
 }

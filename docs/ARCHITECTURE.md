@@ -18,7 +18,10 @@ client
 
 `secure-defaults` implements the same order in one component. Requests flow
 inward and responses unwind outward, so CORS preflight precedes authentication
-and request/security headers decorate controlled rejections.
+and request/security headers decorate controlled rejections. On the way out,
+security and CORS fields are written only when the downstream response did
+not already set that policy. An existing `Referrer-Policy`,
+`X-Content-Type-Options`, or `Access-Control-*` field is preserved.
 
 ## Crate boundaries
 

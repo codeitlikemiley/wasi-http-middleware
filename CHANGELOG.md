@@ -17,6 +17,9 @@ All notable changes are documented here.
 - `accept_trusted_ingress` requires the configured audience list to match
   exactly. HMAC-shaped `wasi-auth` trusted-context envelopes are rejected and
   are not treated as `AuthContextV1`.
+- Security and CORS response headers are set only when absent. A downstream
+  `Referrer-Policy`, `X-Content-Type-Options`, or `Access-Control-*` policy is
+  preserved. `Vary` is still merged and is not narrowed.
 - Recorded this repository as the canonical middleware source and the removal
   plan for `wasi-auth`'s vendored `legacy/wasi-http-middleware` copy. See
   [Canonical ownership](docs/CANONICAL.md).

@@ -35,6 +35,10 @@ different product surface, not a fork of these crates. Do not merge them into
 this repository. In particular, `Referrer-Policy: same-origin`, CSP, and HSTS
 stay in `wasi-auth`. This middleware keeps `nosniff` and
 `strict-origin-when-cross-origin` and leaves HSTS to the TLS terminator.
+When this middleware runs outside `wasi-auth` on the same response, it fills
+only absent baseline fields. It does not replace `Referrer-Policy`,
+`X-Content-Type-Options`, CSP, HSTS, or an existing `Access-Control-*` policy.
+`Vary` is merged and is not narrowed.
 
 ## Context formats that must stay distinct
 

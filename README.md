@@ -32,7 +32,8 @@ request-id -> security-headers -> cors -> authn-policy -> application
 ```
 
 - `request-id` validates or replaces `x-request-id` and returns it.
-- `security-headers` applies `nosniff` and a conservative referrer policy.
+- `security-headers` sets `nosniff` and a conservative referrer policy only
+  when those fields are absent.
 - `cors` uses exact allowlists and completes preflight before authentication.
 - `authn-policy` calls a credential-verification broker, fails closed, strips
   credentials and spoofed metadata, and injects one bounded versioned context.

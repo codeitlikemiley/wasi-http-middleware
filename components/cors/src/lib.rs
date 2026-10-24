@@ -4,13 +4,13 @@
 
 use std::{borrow::Cow, sync::OnceLock};
 
-use http::{Method as HttpMethod, header::VARY};
+use http::Method as HttpMethod;
 use thiserror::Error;
 use wasi_http_middleware_component_support::{
-    Header, empty_response, from_header_map, header_values, remove_header,
-    replace_response_headers, request_headers, response_headers, set_header, to_header_map,
+    Header, empty_response, from_header_map, replace_response_headers, request_headers,
+    response_headers, to_header_map,
 };
-use wasi_http_policy_core::{CorsConfig, vary_value_with_origin};
+use wasi_http_policy_core::{CorsConfig, apply_cors_headers_to_fields};
 use wasip3::{
     cli::environment::get_environment,
     http::types::{ErrorCode, Method, Request, Response},
@@ -27,7 +27,6 @@ const ORIGINS: &str = "WASI_MIDDLEWARE_CORS_ORIGINS";
 const METHODS: &str = "WASI_MIDDLEWARE_CORS_METHODS";
 const HEADERS: &str = "WASI_MIDDLEWARE_CORS_HEADERS";
 const ALLOW_CREDENTIALS: &str = "WASI_MIDDLEWARE_CORS_ALLOW_CREDENTIALS";
-const VARY_HEADER: &str = "vary";
 
 static CONFIG: OnceLock<Result<CorsConfig, ConfigError>> = OnceLock::new();
 
@@ -123,29 +122,14 @@ fn to_http_method(method: &Method) -> Result<HttpMethod, ()> {
 }
 
 fn merge_cors_headers(target: &mut Vec<Header>, source: &http::HeaderMap) {
-    let has_vary = source.contains_key(VARY);
-    for name in source.keys() {
-        if name == VARY {
-            continue;
-        }
-        remove_header(target, name.as_str());
-        for value in source.get_all(name) {
-            target.push((name.as_str().to_owned(), value.as_bytes().to_vec()));
-        }
-    }
-    if has_vary {
-        merge_vary_origin(target);
-    }
-}
-
-fn merge_vary_origin(headers: &mut Vec<Header>) {
-    let merged = vary_value_with_origin(header_values(headers, VARY_HEADER));
-    set_header(headers, VARY_HEADER, merged);
+    apply_cors_headers_to_fields(target, source);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ConfigError, load_config, merge_vary_origin};
+    use http::{HeaderMap, HeaderValue, header};
+
+    use super::{ConfigError, load_config, merge_cors_headers};
 
     #[test]
     fn configuration_rejects_duplicate_environment_keys() {
@@ -170,7 +154,7 @@ mod tests {
     fn vary_merge_preserves_downstream_cache_keys() {
         let mut headers = vec![("vary".to_owned(), b"Accept-Encoding".to_vec())];
 
-        merge_vary_origin(&mut headers);
+        merge_cors_headers(&mut headers, &vary_origin());
 
         assert_eq!(
             headers,
@@ -182,8 +166,47 @@ mod tests {
     fn vary_wildcard_is_not_narrowed() {
         let mut headers = vec![("vary".to_owned(), b"*".to_vec())];
 
-        merge_vary_origin(&mut headers);
+        merge_cors_headers(&mut headers, &vary_origin());
 
         assert_eq!(headers, vec![("vary".to_owned(), b"*".to_vec())]);
+    }
+
+    #[test]
+    fn merge_leaves_a_downstream_cors_policy_in_place() {
+        let mut headers = vec![
+            (
+                "access-control-allow-origin".to_owned(),
+                b"https://auth.example".to_vec(),
+            ),
+            ("vary".to_owned(), b"Accept-Encoding".to_vec()),
+        ];
+        let mut decision = vary_origin();
+        decision.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("https://app.example"),
+        );
+        decision.insert(
+            header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+            HeaderValue::from_static("true"),
+        );
+
+        merge_cors_headers(&mut headers, &decision);
+
+        assert_eq!(
+            headers,
+            vec![
+                (
+                    "access-control-allow-origin".to_owned(),
+                    b"https://auth.example".to_vec(),
+                ),
+                ("vary".to_owned(), b"Accept-Encoding, Origin".to_vec()),
+            ]
+        );
+    }
+
+    fn vary_origin() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::VARY, HeaderValue::from_static("Origin"));
+        headers
     }
 }

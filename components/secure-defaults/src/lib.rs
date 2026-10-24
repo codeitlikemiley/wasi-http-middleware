@@ -11,7 +11,7 @@ use std::{borrow::Cow, sync::OnceLock};
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method as HttpMethod,
     header::{
-        ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, AUTHORIZATION, ORIGIN, VARY,
+        ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, AUTHORIZATION, ORIGIN,
     },
 };
 use thiserror::Error;
@@ -24,7 +24,7 @@ use wasi_http_middleware_component_support::{
     empty_response, generated_request_id, header_values, request_headers,
 };
 use wasi_http_policy_core::{
-    CorsConfig, SECURITY_RESPONSE_HEADERS, canonicalize_request_id_bytes, vary_value_with_origin,
+    CorsConfig, absent_security_header_fields, canonicalize_request_id_bytes, cors_field_edits,
 };
 use wasip3::{
     cli::environment::get_environment,
@@ -250,9 +250,11 @@ fn finalize_response(
                 .then_some(name.as_str())
         })
         .collect::<Vec<_>>();
+    let security =
+        absent_security_header_fields(original_fields.iter().map(|(name, _)| name.as_str()));
     let cors_replacements = cors_replacements(&original_fields, cors_headers);
     let request_id_header = REQUEST_ID_HEADER;
-    let mut replacements = SECURITY_RESPONSE_HEADERS
+    let mut replacements = security
         .iter()
         .map(|(name, value)| (*name, value.as_bytes()))
         .collect::<Vec<_>>();
@@ -288,29 +290,24 @@ fn to_http_method(method: &Method) -> Result<HttpMethod, ()> {
 }
 
 fn cors_replacements(original: &[Header], source: &HeaderMap) -> Vec<Header> {
-    let has_vary = source.contains_key(VARY);
-    let mut replacements = Vec::with_capacity(source.len() + usize::from(has_vary));
-    for name in source.keys() {
-        if name == VARY {
-            continue;
-        }
-        for value in source.get_all(name) {
-            replacements.push((name.as_str().to_owned(), value.as_bytes().to_vec()));
-        }
-    }
-    if has_vary {
-        replacements.push((VARY_HEADER.to_owned(), merged_vary_origin(original)));
+    let edits = cors_field_edits(
+        original
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_slice())),
+        source,
+    );
+    let mut replacements = edits.access_control;
+    if let Some(vary) = edits.vary {
+        replacements.push((VARY_HEADER.to_owned(), vary));
     }
     replacements
 }
 
-fn merged_vary_origin(headers: &[Header]) -> Vec<u8> {
-    vary_value_with_origin(header_values(headers, VARY_HEADER))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use http::{HeaderMap, HeaderValue, header};
+
+    use super::{CorsConfigError, cors_replacements, load_cors_config};
 
     #[test]
     fn cors_configuration_is_required() {
@@ -323,7 +320,39 @@ mod tests {
     #[test]
     fn vary_merge_preserves_downstream_cache_keys() {
         let headers = vec![("vary".to_owned(), b"Accept-Encoding".to_vec())];
-        let merged = merged_vary_origin(&headers);
-        assert_eq!(merged, b"Accept-Encoding, Origin".to_vec());
+        let mut source = HeaderMap::new();
+        source.insert(header::VARY, HeaderValue::from_static("Origin"));
+
+        assert_eq!(
+            cors_replacements(&headers, &source),
+            vec![("vary".to_owned(), b"Accept-Encoding, Origin".to_vec())]
+        );
+    }
+
+    #[test]
+    fn cors_replacements_leave_a_downstream_policy_in_place() {
+        let headers = vec![
+            ("referrer-policy".to_owned(), b"same-origin".to_vec()),
+            (
+                "access-control-allow-origin".to_owned(),
+                b"https://auth.example".to_vec(),
+            ),
+            ("vary".to_owned(), b"Accept-Encoding".to_vec()),
+        ];
+        let mut source = HeaderMap::new();
+        source.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("https://app.example"),
+        );
+        source.insert(
+            header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+            HeaderValue::from_static("true"),
+        );
+        source.insert(header::VARY, HeaderValue::from_static("Origin"));
+
+        assert_eq!(
+            cors_replacements(&headers, &source),
+            vec![("vary".to_owned(), b"Accept-Encoding, Origin".to_vec())]
+        );
     }
 }

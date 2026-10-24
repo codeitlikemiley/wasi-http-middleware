@@ -133,17 +133,155 @@ pub fn is_valid_request_id(value: &str) -> bool {
 /// Response headers set by every security-header enforcement path.
 ///
 /// Native [`apply_security_headers`] and the portable components both read
-/// this table. HSTS and CSP stay outside this crate: HSTS belongs at the TLS
-/// terminator, and CSP is application-specific.
+/// this table, and both write a field only when that name is absent. HSTS and
+/// CSP stay outside this crate: HSTS belongs at the TLS terminator, and CSP
+/// is application-specific. An existing value is never replaced.
 pub const SECURITY_RESPONSE_HEADERS: &[(&str, &str)] = &[
     ("x-content-type-options", "nosniff"),
     ("referrer-policy", "strict-origin-when-cross-origin"),
 ];
 
-/// Applies the fixed baseline security response headers.
+/// Returns the baseline security headers whose names are not in
+/// `existing_names`.
+///
+/// Comparison is case-insensitive. Returned names use the canonical lowercase
+/// spelling from [`SECURITY_RESPONSE_HEADERS`].
+pub fn absent_security_header_fields<'a>(
+    existing_names: impl IntoIterator<Item = &'a str>,
+) -> Vec<(&'static str, &'static str)> {
+    let existing = existing_names.into_iter().collect::<Vec<_>>();
+    SECURITY_RESPONSE_HEADERS
+        .iter()
+        .copied()
+        .filter(|(name, _)| {
+            !existing
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(name))
+        })
+        .collect()
+}
+
+/// Inserts baseline security headers that are not already present.
+///
+/// A downstream `Referrer-Policy` or `X-Content-Type-Options` is preserved
+/// even when its value differs from [`SECURITY_RESPONSE_HEADERS`].
 pub fn apply_security_headers(headers: &mut HeaderMap) {
-    for (name, value) in SECURITY_RESPONSE_HEADERS {
-        headers.insert(*name, HeaderValue::from_static(value));
+    for (name, value) in absent_security_header_fields(headers.keys().map(HeaderName::as_str)) {
+        headers.insert(name, HeaderValue::from_static(value));
+    }
+}
+
+/// Appends baseline security headers that are not already present.
+///
+/// This is the portable field-list form of [`apply_security_headers`].
+pub fn apply_security_headers_to_fields(fields: &mut Vec<(String, Vec<u8>)>) {
+    for (name, value) in absent_security_header_fields(fields.iter().map(|(name, _)| name.as_str()))
+    {
+        fields.push((name.to_owned(), value.as_bytes().to_vec()));
+    }
+}
+
+/// Returns whether `name` is an `Access-Control-*` field.
+///
+/// Any such field means the response already carries a CORS policy. `Vary`
+/// is not included; cache keys are merged separately.
+pub fn is_cors_response_header(name: &str) -> bool {
+    const PREFIX: &[u8] = b"access-control-";
+    name.as_bytes()
+        .get(..PREFIX.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(PREFIX) && name.len() > PREFIX.len())
+}
+
+/// CORS fields that may be added to a downstream response.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CorsFieldEdits {
+    /// `Access-Control-*` fields to append.
+    ///
+    /// Empty when `existing` already contains a CORS response field, so a
+    /// downstream policy is left intact and sibling fields are not mixed in.
+    pub access_control: Vec<(String, Vec<u8>)>,
+    /// Replacement `Vary` value.
+    ///
+    /// `Some` when `decision` contains `Vary`. The bytes preserve existing
+    /// tokens and do not narrow `*`. `None` when `Vary` should be left alone.
+    pub vary: Option<Vec<u8>>,
+}
+
+/// Decides which CORS fields can be written without clobbering `existing`.
+///
+/// `decision` is the header map returned by [`CorsDecision::response_headers`].
+pub fn cors_field_edits<'a>(
+    existing: impl IntoIterator<Item = (&'a str, &'a [u8])>,
+    decision: &HeaderMap,
+) -> CorsFieldEdits {
+    let existing = existing.into_iter().collect::<Vec<_>>();
+    let foreign = existing
+        .iter()
+        .any(|(name, _)| is_cors_response_header(name));
+    let access_control = if foreign {
+        Vec::new()
+    } else {
+        decision
+            .iter()
+            .filter(|(name, _)| *name != VARY)
+            .map(|(name, value)| (name.as_str().to_owned(), value.as_bytes().to_vec()))
+            .collect()
+    };
+    let vary = decision.contains_key(VARY).then(|| {
+        vary_value_with_origin(
+            existing
+                .iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case("vary"))
+                .map(|(_, value)| *value),
+        )
+    });
+    CorsFieldEdits {
+        access_control,
+        vary,
+    }
+}
+
+/// Merges `decision` into `headers` without replacing a downstream CORS policy.
+///
+/// `Access-Control-*` fields are copied only when `headers` has none. `Vary`
+/// is still merged when `decision` carries it.
+pub fn apply_cors_headers(headers: &mut HeaderMap, decision: &HeaderMap) {
+    let edits = cors_field_edits(
+        headers
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_bytes())),
+        decision,
+    );
+    for (name, value) in edits.access_control {
+        let Ok(name) = HeaderName::from_bytes(name.as_bytes()) else {
+            continue;
+        };
+        let Ok(value) = HeaderValue::from_bytes(&value) else {
+            continue;
+        };
+        headers.append(name, value);
+    }
+    if let Some(vary) = edits.vary
+        && let Ok(value) = HeaderValue::from_bytes(&vary)
+    {
+        headers.insert(VARY, value);
+    }
+}
+
+/// Merges `decision` into a portable field list.
+///
+/// This is the field-list form of [`apply_cors_headers`].
+pub fn apply_cors_headers_to_fields(fields: &mut Vec<(String, Vec<u8>)>, decision: &HeaderMap) {
+    let edits = cors_field_edits(
+        fields
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_slice())),
+        decision,
+    );
+    fields.extend(edits.access_control);
+    if let Some(vary) = edits.vary {
+        fields.retain(|(name, _)| !name.eq_ignore_ascii_case("vary"));
+        fields.push(("vary".to_owned(), vary));
     }
 }
 
@@ -765,6 +903,8 @@ fn is_valid_cors_origin(origin: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     #[test]
@@ -793,13 +933,17 @@ mod tests {
     }
 
     #[test]
-    fn security_headers_replace_unsafe_existing_values() {
+    fn security_headers_preserve_existing_values_and_fill_gaps() {
         let mut headers = HeaderMap::new();
         headers.insert("x-content-type-options", HeaderValue::from_static("unsafe"));
 
         apply_security_headers(&mut headers);
 
-        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["x-content-type-options"], "unsafe");
+        assert_eq!(
+            headers["referrer-policy"],
+            "strict-origin-when-cross-origin"
+        );
     }
 
     #[test]
@@ -1056,17 +1200,151 @@ mod tests {
     }
 
     #[test]
-    fn security_header_table_matches_header_map_application() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-content-type-options", HeaderValue::from_static("unsafe"));
-        headers.insert("referrer-policy", HeaderValue::from_static("unsafe-url"));
+    fn native_and_portable_response_policy_preserves_downstream_headers() {
+        let decision = app_cors_decision();
+        let preserved = apply_both(
+            &[
+                ("Referrer-Policy", b"same-origin"),
+                ("x-content-type-options", b"nosniff"),
+                ("content-security-policy", b"default-src 'none'"),
+                (
+                    "strict-transport-security",
+                    b"max-age=31536000; includeSubDomains",
+                ),
+                ("access-control-allow-origin", b"https://auth.example"),
+                ("vary", b"Accept-Encoding"),
+                ("cache-control", b"no-store"),
+            ],
+            &decision,
+        );
+        assert_eq!(single(&preserved, "referrer-policy"), b"same-origin");
+        assert_eq!(single(&preserved, "x-content-type-options"), b"nosniff");
+        assert_eq!(
+            single(&preserved, "content-security-policy"),
+            b"default-src 'none'"
+        );
+        assert_eq!(
+            single(&preserved, "strict-transport-security"),
+            b"max-age=31536000; includeSubDomains"
+        );
+        assert_eq!(
+            single(&preserved, "access-control-allow-origin"),
+            b"https://auth.example"
+        );
+        assert!(!preserved.contains_key("access-control-allow-credentials"));
+        assert_eq!(single(&preserved, "vary"), b"Accept-Encoding, Origin");
+        assert_eq!(single(&preserved, "cache-control"), b"no-store");
 
-        apply_security_headers(&mut headers);
+        let filled = apply_both(&[], &decision);
+        assert_eq!(
+            single(&filled, "referrer-policy"),
+            b"strict-origin-when-cross-origin"
+        );
+        assert_eq!(single(&filled, "x-content-type-options"), b"nosniff");
+        assert_eq!(
+            single(&filled, "access-control-allow-origin"),
+            b"https://app.example"
+        );
+        assert_eq!(single(&filled, "access-control-allow-credentials"), b"true");
+        assert_eq!(single(&filled, "vary"), b"Origin");
+        assert!(!filled.contains_key("content-security-policy"));
+        assert!(!filled.contains_key("strict-transport-security"));
 
-        for (name, value) in SECURITY_RESPONSE_HEADERS {
-            assert_eq!(headers[*name], *value);
+        let partial = apply_both(
+            &[
+                ("referrer-policy", b"same-origin"),
+                ("access-control-allow-credentials", b"true"),
+                ("vary", b"*"),
+            ],
+            &decision,
+        );
+        assert_eq!(single(&partial, "referrer-policy"), b"same-origin");
+        assert_eq!(single(&partial, "x-content-type-options"), b"nosniff");
+        assert_eq!(
+            single(&partial, "access-control-allow-credentials"),
+            b"true"
+        );
+        assert!(!partial.contains_key("access-control-allow-origin"));
+        assert_eq!(single(&partial, "vary"), b"*");
+
+        let kept = apply_both(
+            &[
+                ("x-content-type-options", b"unsafe"),
+                ("referrer-policy", b"unsafe-url"),
+            ],
+            &HeaderMap::new(),
+        );
+        assert_eq!(single(&kept, "x-content-type-options"), b"unsafe");
+        assert_eq!(single(&kept, "referrer-policy"), b"unsafe-url");
+    }
+
+    fn app_cors_decision() -> HeaderMap {
+        let config = CorsConfig::new(
+            ["https://app.example"],
+            ["GET", "POST"],
+            ["content-type"],
+            true,
+        )
+        .expect("valid fixture");
+        let mut request = HeaderMap::new();
+        request.insert(ORIGIN, HeaderValue::from_static("https://app.example"));
+        config
+            .evaluate(&Method::GET, &request)
+            .expect("valid request")
+            .response_headers()
+            .clone()
+    }
+
+    fn apply_both(
+        downstream: &[(&str, &[u8])],
+        decision: &HeaderMap,
+    ) -> BTreeMap<String, Vec<Vec<u8>>> {
+        let mut map = HeaderMap::new();
+        let mut fields = Vec::new();
+        for (name, value) in downstream {
+            map.append(
+                HeaderName::from_bytes(name.as_bytes()).expect("fixture header name"),
+                HeaderValue::from_bytes(value).expect("fixture header value"),
+            );
+            fields.push(((*name).to_owned(), value.to_vec()));
         }
-        assert_eq!(headers.len(), SECURITY_RESPONSE_HEADERS.len());
+        apply_security_headers(&mut map);
+        apply_cors_headers(&mut map, decision);
+        apply_security_headers_to_fields(&mut fields);
+        apply_cors_headers_to_fields(&mut fields, decision);
+
+        let native = header_values_from_map(&map);
+        let portable = header_values_from_fields(&fields);
+        assert_eq!(native, portable, "{downstream:?}");
+        native
+    }
+
+    fn header_values_from_map(headers: &HeaderMap) -> BTreeMap<String, Vec<Vec<u8>>> {
+        let mut values = BTreeMap::<String, Vec<Vec<u8>>>::new();
+        for (name, value) in headers {
+            values
+                .entry(name.as_str().to_owned())
+                .or_default()
+                .push(value.as_bytes().to_vec());
+        }
+        values
+    }
+
+    fn header_values_from_fields(fields: &[(String, Vec<u8>)]) -> BTreeMap<String, Vec<Vec<u8>>> {
+        let mut values = BTreeMap::<String, Vec<Vec<u8>>>::new();
+        for (name, value) in fields {
+            values
+                .entry(name.to_ascii_lowercase())
+                .or_default()
+                .push(value.clone());
+        }
+        values
+    }
+
+    fn single<'a>(fields: &'a BTreeMap<String, Vec<Vec<u8>>>, name: &str) -> &'a [u8] {
+        let values = fields.get(name).unwrap_or_else(|| panic!("missing {name}"));
+        assert_eq!(values.len(), 1, "{name}");
+        &values[0]
     }
 
     #[test]
